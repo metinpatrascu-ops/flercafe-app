@@ -1,0 +1,1578 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>flērcafē — Inventar & Evenimente</title>
+<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+<link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+<style>
+:root {
+  --fc-primary: #c8a96e;
+  --fc-dark: #1a1a1a;
+  --fc-card: #242424;
+  --fc-border: #333;
+  --fc-text: #e0e0e0;
+  --fc-muted: #888;
+}
+* { box-sizing: border-box; }
+body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI', sans-serif; margin: 0; min-height: 100vh; }
+
+/* AUTH */
+#auth-screen { display: flex; align-items: center; justify-content: center; min-height: 100vh; background: linear-gradient(135deg, #1a1a1a 0%, #2a2a2a 100%); }
+.auth-card { background: var(--fc-card); border: 1px solid var(--fc-border); border-radius: 16px; padding: 40px; width: 100%; max-width: 420px; }
+.auth-logo { font-size: 2rem; font-weight: 700; color: var(--fc-primary); letter-spacing: 2px; text-align: center; margin-bottom: 8px; }
+.auth-sub { text-align: center; color: var(--fc-muted); margin-bottom: 32px; font-size: .9rem; }
+
+/* SIDEBAR */
+#app-screen { display: none; }
+.sidebar { width: 240px; min-height: 100vh; background: #111; border-right: 1px solid var(--fc-border); position: fixed; top: 0; left: 0; z-index: 100; padding: 0; display: flex; flex-direction: column; }
+.sidebar-logo { padding: 20px 20px 16px; font-size: 1.3rem; font-weight: 700; color: var(--fc-primary); border-bottom: 1px solid var(--fc-border); letter-spacing: 1px; }
+.sidebar-logo small { display: block; color: var(--fc-muted); font-size: .7rem; font-weight: 400; letter-spacing: 0; }
+.nav-link { color: var(--fc-muted); padding: 11px 20px; display: flex; align-items: center; gap: 12px; border-radius: 0; transition: all .2s; font-size: .93rem; cursor: pointer; border: none; background: none; width: 100%; text-align: left; }
+.nav-link:hover { color: var(--fc-text); background: rgba(255,255,255,.04); }
+.nav-link.active { color: var(--fc-primary); background: rgba(200,169,110,.08); border-right: 3px solid var(--fc-primary); }
+.nav-link i { font-size: 1.1rem; width: 20px; }
+.sidebar-footer { margin-top: auto; padding: 16px; border-top: 1px solid var(--fc-border); }
+
+/* MAIN */
+.main-content { margin-left: 240px; padding: 28px; min-height: 100vh; }
+.page { display: none; }
+.page.active { display: block; }
+.page-title { font-size: 1.5rem; font-weight: 600; color: var(--fc-text); margin-bottom: 4px; }
+.page-sub { color: var(--fc-muted); font-size: .87rem; margin-bottom: 28px; }
+
+/* CARDS */
+.fc-card { background: var(--fc-card); border: 1px solid var(--fc-border); border-radius: 12px; padding: 20px; }
+.stat-card { background: var(--fc-card); border: 1px solid var(--fc-border); border-radius: 12px; padding: 20px; }
+.stat-value { font-size: 2rem; font-weight: 700; color: var(--fc-primary); }
+.stat-label { color: var(--fc-muted); font-size: .85rem; margin-top: 4px; }
+
+/* FORMS */
+.form-control, .form-select { background: #2a2a2a; border-color: var(--fc-border); color: var(--fc-text); }
+.form-control:focus, .form-select:focus { background: #2a2a2a; border-color: var(--fc-primary); color: var(--fc-text); box-shadow: 0 0 0 3px rgba(200,169,110,.15); }
+.form-control::placeholder { color: var(--fc-muted); }
+.form-label { color: var(--fc-muted); font-size: .85rem; margin-bottom: 6px; }
+.btn-primary { background: var(--fc-primary); border-color: var(--fc-primary); color: #111; font-weight: 600; }
+.btn-primary:hover { background: #d4b57a; border-color: #d4b57a; color: #111; }
+.btn-outline-secondary { border-color: var(--fc-border); color: var(--fc-muted); }
+.btn-outline-secondary:hover { background: #333; color: var(--fc-text); border-color: #555; }
+
+/* TABLES */
+.table { color: var(--fc-text); }
+.table td, .table th { border-color: var(--fc-border); vertical-align: middle; }
+.table thead th { background: #111; color: var(--fc-muted); font-weight: 500; font-size: .82rem; text-transform: uppercase; letter-spacing: .5px; }
+.table tbody tr:hover { background: rgba(255,255,255,.025); }
+
+/* BADGES */
+.category-badge { font-size: .72rem; padding: 3px 8px; border-radius: 20px; font-weight: 500; }
+.cat-apa { background: rgba(100,180,255,.15); color: #64b4ff; }
+.cat-soft { background: rgba(255,180,50,.15); color: #ffb432; }
+.cat-alcool { background: rgba(200,100,255,.15); color: #c864ff; }
+.cat-cafea { background: rgba(180,120,60,.15); color: #b4783c; }
+.cat-sirop { background: rgba(100,200,100,.15); color: #64c864; }
+.cat-consumabile { background: rgba(150,150,150,.15); color: #969696; }
+.cat-altele { background: rgba(200,169,110,.15); color: var(--fc-primary); }
+
+/* STOCK */
+.stock-low { color: #ff6464; }
+.stock-ok { color: #64c864; }
+.stock-medium { color: #ffb432; }
+
+/* ALERTS */
+.alert-fc { background: rgba(200,169,110,.1); border: 1px solid rgba(200,169,110,.3); border-radius: 10px; padding: 16px; color: var(--fc-text); }
+
+/* UPLOAD ZONE */
+.upload-zone { border: 2px dashed var(--fc-border); border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; transition: all .2s; color: var(--fc-muted); }
+.upload-zone:hover, .upload-zone.drag-over { border-color: var(--fc-primary); color: var(--fc-primary); background: rgba(200,169,110,.05); }
+.upload-zone img { max-width: 100%; max-height: 300px; border-radius: 8px; margin-top: 16px; }
+
+/* AI RESULT */
+.ai-result { background: #1a2a1a; border: 1px solid #2a4a2a; border-radius: 12px; padding: 20px; }
+.ai-warning { background: rgba(255,180,50,.1); border: 1px solid rgba(255,180,50,.3); border-radius: 8px; padding: 12px; color: #ffb432; font-size: .87rem; }
+.rec-card { background: #1e1e1e; border: 1px solid var(--fc-border); border-radius: 10px; padding: 16px; margin-bottom: 12px; }
+.rec-card .qty { font-size: 1.4rem; font-weight: 700; color: var(--fc-primary); }
+
+/* MODAL */
+.modal-content { background: var(--fc-card); border: 1px solid var(--fc-border); color: var(--fc-text); }
+.modal-header { border-bottom-color: var(--fc-border); }
+.modal-footer { border-top-color: var(--fc-border); }
+
+/* MOBILE */
+.mobile-nav-toggle { display: none; position: fixed; top: 16px; left: 16px; z-index: 200; background: var(--fc-card); border: 1px solid var(--fc-border); border-radius: 8px; padding: 8px 12px; color: var(--fc-text); cursor: pointer; }
+@media (max-width: 768px) {
+  .mobile-nav-toggle { display: flex; align-items: center; }
+  .sidebar { transform: translateX(-100%); transition: transform .3s; }
+  .sidebar.open { transform: translateX(0); }
+  .main-content { margin-left: 0; padding: 16px; padding-top: 60px; }
+}
+
+/* LOADING */
+.spinner-fc { display: inline-block; width: 20px; height: 20px; border: 2px solid rgba(200,169,110,.3); border-top-color: var(--fc-primary); border-radius: 50%; animation: spin .8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* INGREDIENT ROW */
+.ingredient-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+.ingredient-row .form-control, .ingredient-row .form-select { flex: 1; }
+
+/* SEASON / TYPE CHIPS */
+.chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
+.chip { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--fc-border); background: transparent; color: var(--fc-muted); cursor: pointer; font-size: .85rem; transition: all .15s; }
+.chip.selected { background: var(--fc-primary); border-color: var(--fc-primary); color: #111; font-weight: 600; }
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth-screen">
+  <div class="auth-card">
+    <div class="auth-logo">☕ flērcafē</div>
+    <div class="auth-sub">Inventar & Management Evenimente</div>
+    <div id="auth-error" class="alert alert-danger d-none mb-3" style="font-size:.87rem;"></div>
+    <div id="login-form">
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" id="login-email" class="form-control" placeholder="email@tau.ro">
+      </div>
+      <div class="mb-4">
+        <label class="form-label">Parolă</label>
+        <input type="password" id="login-password" class="form-control" placeholder="••••••">
+      </div>
+      <button class="btn btn-primary w-100 mb-3" onclick="doLogin()">Intră în aplicație</button>
+      <div class="text-center" style="color:var(--fc-muted);font-size:.85rem;">
+        Nu ai cont? <a href="#" onclick="showRegister()" style="color:var(--fc-primary);">Creează cont</a>
+      </div>
+    </div>
+    <div id="register-form" class="d-none">
+      <div class="mb-3">
+        <label class="form-label">Nume</label>
+        <input type="text" id="reg-name" class="form-control" placeholder="Numele tău">
+      </div>
+      <div class="mb-3">
+        <label class="form-label">Email</label>
+        <input type="email" id="reg-email" class="form-control" placeholder="email@tau.ro">
+      </div>
+      <div class="mb-4">
+        <label class="form-label">Parolă</label>
+        <input type="password" id="reg-password" class="form-control" placeholder="Minim 6 caractere">
+      </div>
+      <button class="btn btn-primary w-100 mb-3" onclick="doRegister()">Creează cont</button>
+      <div class="text-center" style="color:var(--fc-muted);font-size:.85rem;">
+        Ai deja cont? <a href="#" onclick="showLogin()" style="color:var(--fc-primary);">Autentifică-te</a>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<button class="mobile-nav-toggle" onclick="toggleSidebar()"><i class="bi bi-list fs-5"></i></button>
+
+<div id="app-screen">
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-logo">☕ flērcafē<small>Inventar & Evenimente</small></div>
+    <div style="padding:12px 0; flex:1;">
+      <button class="nav-link active" onclick="showPage('dashboard')"><i class="bi bi-grid"></i> Dashboard</button>
+      <button class="nav-link" onclick="showPage('stock')"><i class="bi bi-box-seam"></i> Stoc Produse</button>
+      <button class="nav-link" onclick="showPage('invoices')"><i class="bi bi-receipt"></i> Facturi</button>
+      <button class="nav-link" onclick="showPage('events')"><i class="bi bi-calendar-event"></i> Evenimente</button>
+      <button class="nav-link" onclick="showPage('recipes')"><i class="bi bi-cup-hot"></i> Rețete Bar</button>
+      <button class="nav-link" onclick="showPage('calculator')"><i class="bi bi-calculator"></i> Calculator</button>
+    </div>
+    <div class="sidebar-footer">
+      <div style="color:var(--fc-muted);font-size:.8rem;margin-bottom:8px;" id="sidebar-user"></div>
+      <button class="btn btn-outline-secondary btn-sm w-100" onclick="logout()"><i class="bi bi-box-arrow-right"></i> Ieși</button>
+    </div>
+  </nav>
+
+  <main class="main-content">
+
+    <!-- DASHBOARD -->
+    <div id="page-dashboard" class="page active">
+      <div class="page-title">Dashboard</div>
+      <div class="page-sub">Rezumat stoc și activitate recentă</div>
+      <div class="row g-3 mb-4" id="dash-stats">
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value" id="d-products">—</div><div class="stat-label">Produse în stoc</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value text-danger" id="d-lowstock">—</div><div class="stat-label">Stoc scăzut</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value" id="d-stockvalue">—</div><div class="stat-label">Valoare stoc (RON)</div></div></div>
+        <div class="col-6 col-md-3"><div class="stat-card"><div class="stat-value" id="d-events">—</div><div class="stat-label">Evenimente viitoare</div></div></div>
+      </div>
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="fc-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <strong>⚠️ Stoc scăzut</strong>
+              <button class="btn btn-sm btn-outline-secondary" onclick="showPage('stock')">Vezi tot</button>
+            </div>
+            <div id="d-lowstock-list"><div style="color:var(--fc-muted);font-size:.87rem;">Se încarcă...</div></div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="fc-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <strong>📅 Evenimente apropiate</strong>
+              <button class="btn btn-sm btn-outline-secondary" onclick="showPage('events')">Toate</button>
+            </div>
+            <div id="d-upcoming-events"><div style="color:var(--fc-muted);font-size:.87rem;">Se încarcă...</div></div>
+          </div>
+        </div>
+        <div class="col-12">
+          <div class="fc-card">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <strong>🕐 Ultimele mișcări de stoc</strong>
+              <button class="btn btn-sm btn-outline-secondary" onclick="showPage('stock')">Istoric</button>
+            </div>
+            <div id="d-movements" class="table-responsive">
+              <div style="color:var(--fc-muted);font-size:.87rem;">Se încarcă...</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- STOCK -->
+    <div id="page-stock" class="page">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <div class="page-title">Stoc Produse</div>
+        <div class="d-flex gap-2">
+          <button class="btn btn-outline-secondary btn-sm" onclick="exportExcel()" title="Descarcă inventarul ca fișier Excel">
+            <i class="bi bi-file-earmark-excel"></i> Export Excel
+          </button>
+          <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="bi bi-plus"></i> Adaugă produs</button>
+        </div>
+      </div>
+      <div class="page-sub">Toate produsele din inventar cu prețuri și cantități</div>
+
+      <div class="fc-card mb-3">
+        <div class="row g-2 align-items-end">
+          <div class="col-md-5">
+            <input type="text" id="stock-search" class="form-control form-control-sm" placeholder="Caută produs..." oninput="filterStock()">
+          </div>
+          <div class="col-md-3">
+            <select id="stock-cat-filter" class="form-select form-select-sm" onchange="filterStock()">
+              <option value="">Toate categoriile</option>
+              <option value="apa">Apă</option>
+              <option value="soft">Soft Drinks</option>
+              <option value="alcool">Alcool</option>
+              <option value="sirop">Siropuri</option>
+              <option value="cafea">Cafea</option>
+              <option value="consumabile">Consumabile</option>
+              <option value="altele">Altele</option>
+            </select>
+          </div>
+          <div class="col-md-4">
+            <div class="form-check form-switch mb-0">
+              <input class="form-check-input" type="checkbox" id="show-low-stock" onchange="filterStock()">
+              <label class="form-check-label" for="show-low-stock" style="font-size:.87rem;color:var(--fc-muted);">Doar stoc scăzut</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="fc-card p-0">
+        <div class="table-responsive">
+          <table class="table table-hover mb-0">
+            <thead>
+              <tr>
+                <th>Produs</th>
+                <th>Categorie</th>
+                <th>Stoc</th>
+                <th>Preț / unitate</th>
+                <th>Valoare</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="stock-table-body">
+              <tr><td colspan="6" class="text-center py-4" style="color:var(--fc-muted);">Se încarcă...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- INVOICES -->
+    <div id="page-invoices" class="page">
+      <div class="page-title">Facturi</div>
+      <div class="page-sub">Scanează sau adaugă manual facturi pentru a actualiza stocul</div>
+
+      <div class="row g-3">
+        <div class="col-md-6">
+          <div class="fc-card h-100">
+            <h6 class="mb-3"><i class="bi bi-camera" style="color:var(--fc-primary);"></i> Scanează factură (AI)</h6>
+            <div class="upload-zone" id="upload-zone" onclick="document.getElementById('invoice-file').click()" ondragover="dragOver(event)" ondragleave="dragLeave(event)" ondrop="dropFile(event)">
+              <i class="bi bi-cloud-upload" style="font-size:2rem;"></i>
+              <div class="mt-2 fw-semibold">Trage sau click să încarci poza</div>
+              <div style="font-size:.82rem;margin-top:4px;">JPG, PNG, WEBP — max 10MB</div>
+              <img id="upload-preview" class="d-none">
+            </div>
+            <input type="file" id="invoice-file" accept="image/*" class="d-none" onchange="previewFile(event)">
+            <div class="mt-3 d-flex gap-2">
+              <button class="btn btn-primary flex-grow-1" onclick="scanInvoice()" id="scan-btn">
+                <i class="bi bi-magic"></i> Analizează cu AI
+              </button>
+              <button class="btn btn-outline-secondary" onclick="clearUpload()"><i class="bi bi-x"></i></button>
+            </div>
+            <div id="scan-status" class="mt-3 d-none"></div>
+          </div>
+        </div>
+
+        <div class="col-md-6">
+          <div class="fc-card h-100">
+            <h6 class="mb-3"><i class="bi bi-pencil" style="color:var(--fc-primary);"></i> Adaugă manual</h6>
+            <div class="mb-2">
+              <label class="form-label">Furnizor</label>
+              <input type="text" id="m-supplier" class="form-control" placeholder="ex: Metro, Selgros">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Data</label>
+              <input type="date" id="m-date" class="form-control">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Total factură (RON)</label>
+              <input type="number" id="m-total" class="form-control" placeholder="0.00">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Note</label>
+              <input type="text" id="m-notes" class="form-control" placeholder="observații...">
+            </div>
+            <button class="btn btn-outline-secondary w-100 mt-1" onclick="saveManualInvoice()">
+              <i class="bi bi-floppy"></i> Salvează (fără produse)
+            </button>
+          </div>
+        </div>
+
+        <!-- OCR Result -->
+        <div class="col-12" id="ocr-result-section" style="display:none;">
+          <div class="ai-result">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <h6 class="mb-0"><i class="bi bi-robot" style="color:#64c864;"></i> Rezultat AI — confirmă și actualizează stocul</h6>
+              <button class="btn btn-sm btn-outline-secondary" onclick="closeOcrResult()"><i class="bi bi-x"></i></button>
+            </div>
+            <div class="row mb-3">
+              <div class="col-md-4">
+                <label class="form-label">Furnizor</label>
+                <input type="text" id="ocr-supplier" class="form-control">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Data</label>
+                <input type="date" id="ocr-date" class="form-control">
+              </div>
+              <div class="col-md-4">
+                <label class="form-label">Total (RON)</label>
+                <input type="number" id="ocr-total" class="form-control">
+              </div>
+            </div>
+            <div class="table-responsive mb-3">
+              <table class="table table-sm">
+                <thead>
+                  <tr>
+                    <th>Produs detectat</th>
+                    <th>Leg la produs din stoc</th>
+                    <th>Cant.</th>
+                    <th>Preț/buc</th>
+                    <th>Total</th>
+                  </tr>
+                </thead>
+                <tbody id="ocr-items-table"></tbody>
+              </table>
+            </div>
+            <button class="btn btn-primary" onclick="confirmOcrInvoice()">
+              <i class="bi bi-check2-circle"></i> Confirmă și actualizează stocul
+            </button>
+          </div>
+        </div>
+
+        <!-- History -->
+        <div class="col-12">
+          <div class="fc-card">
+            <h6 class="mb-3">Istoricul facturilor</h6>
+            <div class="table-responsive">
+              <table class="table">
+                <thead>
+                  <tr><th>Data</th><th>Furnizor</th><th>Total</th><th>Status</th><th>Produse</th></tr>
+                </thead>
+                <tbody id="invoices-list">
+                  <tr><td colspan="5" class="text-center py-3" style="color:var(--fc-muted);">Se încarcă...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- EVENTS -->
+    <div id="page-events" class="page">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <div class="page-title">Evenimente</div>
+        <button class="btn btn-primary btn-sm" onclick="openEventModal()"><i class="bi bi-plus"></i> Eveniment nou</button>
+      </div>
+      <div class="page-sub">Planifică evenimente și obține recomandări AI pentru cantitățile necesare</div>
+
+      <!-- Brief Analyzer -->
+      <div class="fc-card mb-4">
+        <h6 class="mb-3"><i class="bi bi-robot" style="color:var(--fc-primary);"></i> Analiză Brief Eveniment</h6>
+        <div class="row g-3">
+          <div class="col-md-3">
+            <label class="form-label">Număr invitați *</label>
+            <input type="number" id="ev-guests" class="form-control" placeholder="ex: 150" min="1">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Durată (ore)</label>
+            <input type="number" id="ev-hours" class="form-control" placeholder="4" value="4" min="1" max="24">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Tip eveniment</label>
+            <select id="ev-type" class="form-select">
+              <option value="corporate">Corporate</option>
+              <option value="lansare">Lansare produs</option>
+              <option value="party">Party / Festival</option>
+              <option value="nunta">Nuntă</option>
+              <option value="altele">Altele</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Sezon</label>
+            <select id="ev-season" class="form-select">
+              <option value="vara">Vară (Jun-Aug)</option>
+              <option value="toamna">Toamnă (Sep-Nov)</option>
+              <option value="iarna">Iarnă (Dec-Feb)</option>
+              <option value="primavara">Primăvară (Mar-Mai)</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Brief / descriere eveniment</label>
+            <textarea id="ev-brief" class="form-control" rows="4" placeholder="Exemplu: Lansare GLS & Mercedes, 150 de persoane, eveniment corporate de seară. Se doresc 4 cocktailuri signature, apă plată și minerală, cola, socată, și 20 sticle de Prosecco pentru welcome drink. Invitații vor fi business professionals..."></textarea>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Meniu cerut de client (opțional)</label>
+            <div id="menu-items-list"></div>
+            <button class="btn btn-outline-secondary btn-sm mt-1" onclick="addMenuItem()"><i class="bi bi-plus"></i> Adaugă item din meniu</button>
+          </div>
+          <div class="col-12">
+            <button class="btn btn-primary" onclick="analyzeEvent()" id="analyze-btn">
+              <i class="bi bi-magic"></i> Analizează cu AI
+            </button>
+          </div>
+        </div>
+
+        <!-- AI Result -->
+        <div id="ev-ai-result" class="mt-4 d-none">
+          <hr style="border-color:var(--fc-border);">
+          <h6 class="mb-3" style="color:#64c864;"><i class="bi bi-check-circle"></i> Recomandări AI</h6>
+          <div id="ev-summary" class="alert-fc mb-3"></div>
+          <div id="ev-warnings"></div>
+          <div id="ev-recommendations"></div>
+          <div class="mt-3 d-flex gap-2 flex-wrap">
+            <button class="btn btn-primary btn-sm" onclick="saveEventFromAnalysis()"><i class="bi bi-floppy"></i> Salvează ca eveniment</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Events List -->
+      <div class="fc-card">
+        <h6 class="mb-3">Toate evenimentele</h6>
+        <div class="table-responsive">
+          <table class="table">
+            <thead>
+              <tr><th>Eveniment</th><th>Client</th><th>Data</th><th>Invitați</th><th>Status</th><th>Ofertă</th><th></th></tr>
+            </thead>
+            <tbody id="events-list">
+              <tr><td colspan="7" class="text-center py-3" style="color:var(--fc-muted);">Se încarcă...</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- RECIPES -->
+    <div id="page-recipes" class="page">
+      <div class="d-flex justify-content-between align-items-start mb-1">
+        <div class="page-title">Rețete Bar</div>
+        <button class="btn btn-primary btn-sm" onclick="openRecipeModal()"><i class="bi bi-plus"></i> Rețetă nouă</button>
+      </div>
+      <div class="page-sub">Rețetele tale de cocktailuri cu calculul automat al costului de producție</div>
+      <div class="row g-3" id="recipes-grid">
+        <div class="col-12 text-center py-4" style="color:var(--fc-muted);">Se încarcă...</div>
+      </div>
+    </div>
+
+    <!-- CALCULATOR -->
+    <div id="page-calculator" class="page">
+      <div class="page-title">Calculator Ofertare</div>
+      <div class="page-sub">Calculează costul total și prețul de ofertă pentru un eveniment</div>
+
+      <div class="row g-3">
+        <div class="col-md-8">
+          <div class="fc-card">
+            <h6 class="mb-3"><i class="bi bi-cart3" style="color:var(--fc-primary);"></i> Produse necesare</h6>
+            <div id="calc-items">
+              <div class="ingredient-row">
+                <select class="form-select form-select-sm" onchange="updateCalcItem(this)"><option value="">— Alege produs —</option></select>
+                <input type="number" class="form-control form-control-sm" placeholder="Cant." min="0" step="0.1" style="max-width:80px;" oninput="recalculate()">
+                <select class="form-select form-select-sm" style="max-width:80px;">
+                  <option>buc</option><option>bax</option><option>kg</option><option>L</option>
+                </select>
+                <button class="btn btn-outline-secondary btn-sm" onclick="this.closest('.ingredient-row').remove(); recalculate()"><i class="bi bi-x"></i></button>
+              </div>
+            </div>
+            <button class="btn btn-outline-secondary btn-sm mt-2" onclick="addCalcItem()"><i class="bi bi-plus"></i> Adaugă produs</button>
+          </div>
+        </div>
+
+        <div class="col-md-4">
+          <div class="fc-card">
+            <h6 class="mb-3"><i class="bi bi-graph-up" style="color:var(--fc-primary);"></i> Calcul ofertă</h6>
+            <div class="mb-3">
+              <label class="form-label">Marjă profit dorită (%)</label>
+              <input type="number" id="calc-margin" class="form-control" value="200" min="0" max="1000" oninput="recalculate()">
+              <div style="font-size:.75rem;color:var(--fc-muted);margin-top:4px;">200% = vinzi de 3x față de cost</div>
+            </div>
+            <hr style="border-color:var(--fc-border);">
+            <div class="mb-2 d-flex justify-content-between">
+              <span style="color:var(--fc-muted);">Cost achiziție:</span>
+              <strong id="calc-cost">0.00 RON</strong>
+            </div>
+            <div class="mb-2 d-flex justify-content-between">
+              <span style="color:var(--fc-muted);">Profit estimat:</span>
+              <strong id="calc-profit" style="color:#64c864;">0.00 RON</strong>
+            </div>
+            <div class="mb-3 d-flex justify-content-between">
+              <span style="color:var(--fc-muted);">Preț ofertă recomandat:</span>
+              <strong id="calc-price" style="color:var(--fc-primary);font-size:1.1rem;">0.00 RON</strong>
+            </div>
+            <button class="btn btn-primary w-100" onclick="exportCalc()"><i class="bi bi-download"></i> Descarcă oferta</button>
+          </div>
+        </div>
+
+        <div class="col-12">
+          <div class="fc-card">
+            <h6 class="mb-2">Detaliu costuri</h6>
+            <div class="table-responsive">
+              <table class="table table-sm">
+                <thead><tr><th>Produs</th><th>Cantitate</th><th>Preț/buc</th><th>Total</th></tr></thead>
+                <tbody id="calc-breakdown"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- PRODUCT MODAL -->
+<div class="modal fade" id="productModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="product-modal-title">Produs nou</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="product-id">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Denumire *</label>
+            <input type="text" id="p-name" class="form-control" placeholder="ex: Apă Plată Dorna 0.75L">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Categorie</label>
+            <select id="p-category" class="form-select">
+              <option value="apa">Apă</option>
+              <option value="soft">Soft Drinks</option>
+              <option value="alcool">Alcool</option>
+              <option value="sirop">Siropuri</option>
+              <option value="cafea">Cafea</option>
+              <option value="consumabile">Consumabile</option>
+              <option value="altele">Altele</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Unitate</label>
+            <select id="p-unit" class="form-select">
+              <option>buc</option><option>sticla</option><option>bax</option><option>kg</option><option>L</option><option>pachet</option>
+            </select>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Volum/Greutate per unitate</label>
+            <div class="input-group">
+              <input type="number" id="p-packageSize" class="form-control" placeholder="0.75" min="0" step="0.01">
+              <select id="p-packageUnit" class="form-select" style="max-width:70px;">
+                <option>L</option><option>ml</option><option>kg</option><option>g</option><option>buc</option>
+              </select>
+            </div>
+          </div>
+          <div class="col-6">
+            <label class="form-label">Preț achiziție (RON/unitate)</label>
+            <input type="number" id="p-price" class="form-control" placeholder="0.00" min="0" step="0.01">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Stoc actual</label>
+            <input type="number" id="p-stock" class="form-control" placeholder="0" min="0" step="1">
+          </div>
+          <div class="col-6">
+            <label class="form-label">Stoc minim alertă</label>
+            <input type="number" id="p-minstock" class="form-control" placeholder="0" min="0" step="1">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Note</label>
+            <input type="text" id="p-notes" class="form-control" placeholder="observații...">
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
+        <button type="button" class="btn btn-primary" onclick="saveProduct()">Salvează</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- STOCK ADJUST MODAL -->
+<div class="modal fade" id="stockModal" tabindex="-1">
+  <div class="modal-dialog modal-sm">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Ajustare stoc</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="adj-product-id">
+        <div id="adj-product-name" class="mb-3 fw-semibold" style="color:var(--fc-primary);"></div>
+        <div class="mb-3">
+          <label class="form-label">Tip mișcare</label>
+          <select id="adj-type" class="form-select">
+            <option value="in">Intrare în stoc</option>
+            <option value="out">Ieșire din stoc</option>
+          </select>
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Cantitate</label>
+          <input type="number" id="adj-qty" class="form-control" placeholder="0" min="1" step="1">
+        </div>
+        <div class="mb-3">
+          <label class="form-label">Motiv</label>
+          <select id="adj-reason" class="form-select">
+            <option value="manual">Ajustare manuală</option>
+            <option value="eveniment">Eveniment</option>
+            <option value="pierdere">Pierdere / Spargere</option>
+          </select>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
+        <button type="button" class="btn btn-primary" onclick="saveStockAdjust()">Salvează</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- RECIPE MODAL -->
+<div class="modal fade" id="recipeModal" tabindex="-1">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title" id="recipe-modal-title">Rețetă nouă</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="recipe-id">
+        <div class="row g-3">
+          <div class="col-md-6">
+            <label class="form-label">Denumire rețetă *</label>
+            <input type="text" id="r-name" class="form-control" placeholder="ex: Limonadă cu Socată">
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Categorie</label>
+            <select id="r-category" class="form-select">
+              <option value="cocktail">Cocktail</option>
+              <option value="mocktail">Mocktail</option>
+              <option value="cafea">Cafea</option>
+              <option value="bautura_calda">Băutură caldă</option>
+              <option value="altele">Altele</option>
+            </select>
+          </div>
+          <div class="col-md-3">
+            <label class="form-label">Serving (ml)</label>
+            <input type="number" id="r-serving" class="form-control" value="250">
+          </div>
+          <div class="col-md-4">
+            <label class="form-label">Preț vânzare (RON)</label>
+            <input type="number" id="r-price" class="form-control" placeholder="0.00" step="0.5">
+          </div>
+          <div class="col-12">
+            <label class="form-label">Ingrediente</label>
+            <div id="recipe-ingredients"></div>
+            <button type="button" class="btn btn-outline-secondary btn-sm mt-2" onclick="addRecipeIngredient()"><i class="bi bi-plus"></i> Adaugă ingredient</button>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Note / mod preparare</label>
+            <textarea id="r-notes" class="form-control" rows="2" placeholder="Instrucțiuni de preparare..."></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="me-auto" style="color:var(--fc-muted);font-size:.87rem;">Cost producție: <strong id="recipe-cost-preview" style="color:var(--fc-primary);">— RON</strong></div>
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
+        <button type="button" class="btn btn-primary" onclick="saveRecipe()">Salvează rețeta</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- EVENT SAVE MODAL -->
+<div class="modal fade" id="eventModal" tabindex="-1">
+  <div class="modal-dialog">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">Salvează eveniment</h5>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-3">
+          <div class="col-12">
+            <label class="form-label">Numele evenimentului *</label>
+            <input type="text" id="e-name" class="form-control" placeholder="ex: Lansare GLS — Mercedes">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Client</label>
+            <input type="text" id="e-client" class="form-control" placeholder="ex: Mercedes-Benz Romania">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Data evenimentului</label>
+            <input type="date" id="e-date" class="form-control">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Preț ofertă (RON)</label>
+            <input type="number" id="e-offer" class="form-control" placeholder="0.00">
+          </div>
+          <div class="col-md-6">
+            <label class="form-label">Status</label>
+            <select id="e-status" class="form-select">
+              <option value="draft">Draft</option>
+              <option value="oferta">Ofertă trimisă</option>
+              <option value="confirmat">Confirmat</option>
+            </select>
+          </div>
+          <div class="col-12">
+            <label class="form-label">Note</label>
+            <textarea id="e-notes" class="form-control" rows="2"></textarea>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
+        <button type="button" class="btn btn-primary" onclick="saveEvent()">Salvează</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+<script>
+// ── STATE ───────────────────────────────────────────────────────────────────
+let TOKEN = localStorage.getItem('fc_token');
+let allProducts = [];
+let currentOcrInvoiceId = null;
+let lastAiAnalysis = null;
+let lastEventData = null;
+
+// ── INIT ────────────────────────────────────────────────────────────────────
+window.onload = () => {
+  if (TOKEN) {
+    showApp();
+  } else {
+    document.getElementById('m-date').valueAsDate = new Date();
+  }
+};
+
+function showApp() {
+  document.getElementById('auth-screen').style.display = 'none';
+  document.getElementById('app-screen').style.display = 'block';
+  loadProducts();
+  loadDashboard();
+}
+
+function showPage(name) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.querySelectorAll('.nav-link').forEach(n => n.classList.remove('active'));
+  document.getElementById('page-' + name).classList.add('active');
+  document.querySelectorAll('.nav-link').forEach(n => {
+    if (n.textContent.toLowerCase().includes(name === 'dashboard' ? 'dashboard' :
+        name === 'stock' ? 'stoc' : name === 'invoices' ? 'facturi' :
+        name === 'events' ? 'even' : name === 'recipes' ? 'rețete' : 'calc')) {
+      n.classList.add('active');
+    }
+  });
+  if (name === 'dashboard') loadDashboard();
+  if (name === 'stock') renderStockTable();
+  if (name === 'invoices') loadInvoices();
+  if (name === 'events') loadEvents();
+  if (name === 'recipes') loadRecipes();
+  if (name === 'calculator') initCalculator();
+  closeSidebar();
+}
+
+function toggleSidebar() {
+  document.getElementById('sidebar').classList.toggle('open');
+}
+function closeSidebar() {
+  document.getElementById('sidebar').classList.remove('open');
+}
+
+// ── API ──────────────────────────────────────────────────────────────────────
+async function api(method, path, body, isFormData = false) {
+  const opts = { method, headers: { Authorization: 'Bearer ' + TOKEN } };
+  if (body && !isFormData) {
+    opts.headers['Content-Type'] = 'application/json';
+    opts.body = JSON.stringify(body);
+  } else if (body) {
+    opts.body = body;
+  }
+  const res = await fetch('/api' + path, opts);
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.error || 'Eroare server');
+  return data;
+}
+
+// ── AUTH ─────────────────────────────────────────────────────────────────────
+function showRegister() { document.getElementById('login-form').classList.add('d-none'); document.getElementById('register-form').classList.remove('d-none'); }
+function showLogin() { document.getElementById('register-form').classList.add('d-none'); document.getElementById('login-form').classList.remove('d-none'); }
+
+async function doLogin() {
+  const email = document.getElementById('login-email').value;
+  const password = document.getElementById('login-password').value;
+  try {
+    const data = await api('POST', '/auth/login', { email, password });
+    TOKEN = data.token;
+    localStorage.setItem('fc_token', TOKEN);
+    document.getElementById('sidebar-user').textContent = data.user.name;
+    showApp();
+  } catch (e) {
+    const el = document.getElementById('auth-error');
+    el.textContent = e.message;
+    el.classList.remove('d-none');
+  }
+}
+
+async function doRegister() {
+  const name = document.getElementById('reg-name').value;
+  const email = document.getElementById('reg-email').value;
+  const password = document.getElementById('reg-password').value;
+  try {
+    const data = await api('POST', '/auth/register', { name, email, password });
+    TOKEN = data.token;
+    localStorage.setItem('fc_token', TOKEN);
+    document.getElementById('sidebar-user').textContent = data.user.name;
+    showApp();
+  } catch (e) {
+    const el = document.getElementById('auth-error');
+    el.textContent = e.message;
+    el.classList.remove('d-none');
+  }
+}
+
+function logout() { localStorage.removeItem('fc_token'); location.reload(); }
+
+// ── DASHBOARD ────────────────────────────────────────────────────────────────
+async function loadDashboard() {
+  try {
+    const d = await api('GET', '/dashboard');
+    document.getElementById('d-products').textContent = d.totalProducts;
+    document.getElementById('d-lowstock').textContent = d.lowStock.length;
+    document.getElementById('d-stockvalue').textContent = d.totalStockValue.toFixed(0);
+    document.getElementById('d-events').textContent = d.upcomingEvents.length;
+
+    const lsEl = document.getElementById('d-lowstock-list');
+    if (d.lowStock.length === 0) {
+      lsEl.innerHTML = '<div style="color:var(--fc-muted);font-size:.87rem;">Stocul este OK ✓</div>';
+    } else {
+      lsEl.innerHTML = d.lowStock.map(p => `
+        <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--fc-border);">
+          <span>${p.name}</span>
+          <span class="stock-low fw-semibold">${p.stockQuantity} ${p.unit} <small style="color:var(--fc-muted);">(min: ${p.minStock})</small></span>
+        </div>`).join('');
+    }
+
+    const evEl = document.getElementById('d-upcoming-events');
+    if (d.upcomingEvents.length === 0) {
+      evEl.innerHTML = '<div style="color:var(--fc-muted);font-size:.87rem;">Niciun eveniment planificat</div>';
+    } else {
+      evEl.innerHTML = d.upcomingEvents.map(e => `
+        <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--fc-border);">
+          <span>${e.name}</span>
+          <span style="color:var(--fc-muted);font-size:.83rem;">${e.date ? new Date(e.date).toLocaleDateString('ro-RO') : '—'} · ${e.guestCount} inv.</span>
+        </div>`).join('');
+    }
+
+    const mvEl = document.getElementById('d-movements');
+    if (d.recentMovements.length === 0) {
+      mvEl.innerHTML = '<div style="color:var(--fc-muted);font-size:.87rem;">Nicio mișcare recentă</div>';
+    } else {
+      mvEl.innerHTML = `<table class="table table-sm mb-0">
+        <thead><tr><th>Produs</th><th>Tip</th><th>Cant.</th><th>Motiv</th><th>Data</th></tr></thead>
+        <tbody>${d.recentMovements.map(m => `
+          <tr>
+            <td>${m.productName}</td>
+            <td><span class="badge ${m.type === 'in' ? 'bg-success' : 'bg-danger'}">${m.type === 'in' ? 'Intrare' : 'Ieșire'}</span></td>
+            <td>${m.quantity}</td>
+            <td style="color:var(--fc-muted);font-size:.82rem;">${m.reason}</td>
+            <td style="color:var(--fc-muted);font-size:.82rem;">${new Date(m.date).toLocaleDateString('ro-RO')}</td>
+          </tr>`).join('')}
+        </tbody></table>`;
+    }
+  } catch (e) { console.error(e); }
+}
+
+// ── PRODUCTS ─────────────────────────────────────────────────────────────────
+async function loadProducts() {
+  try {
+    allProducts = await api('GET', '/products');
+    renderStockTable();
+    refreshProductSelects();
+  } catch (e) { console.error(e); }
+}
+
+const catLabels = { apa: 'Apă', soft: 'Soft', alcool: 'Alcool', sirop: 'Sirop', cafea: 'Cafea', consumabile: 'Consumabile', altele: 'Altele' };
+
+function renderStockTable(products) {
+  const items = products || allProducts;
+  const search = document.getElementById('stock-search')?.value.toLowerCase() || '';
+  const cat = document.getElementById('stock-cat-filter')?.value || '';
+  const lowOnly = document.getElementById('show-low-stock')?.checked || false;
+
+  let filtered = items.filter(p => {
+    if (search && !p.name.toLowerCase().includes(search)) return false;
+    if (cat && p.category !== cat) return false;
+    if (lowOnly && !(p.minStock > 0 && p.stockQuantity <= p.minStock)) return false;
+    return true;
+  });
+
+  const tbody = document.getElementById('stock-table-body');
+  if (!tbody) return;
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6" class="text-center py-4" style="color:var(--fc-muted);">Niciun produs găsit</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(p => {
+    const val = (p.stockQuantity * p.purchasePrice).toFixed(2);
+    const isLow = p.minStock > 0 && p.stockQuantity <= p.minStock;
+    const stockClass = isLow ? 'stock-low' : p.stockQuantity > p.minStock * 2 ? 'stock-ok' : 'stock-medium';
+    return `<tr>
+      <td>
+        <div class="fw-semibold">${p.name}</div>
+        ${p.notes ? `<div style="color:var(--fc-muted);font-size:.8rem;">${p.notes}</div>` : ''}
+      </td>
+      <td><span class="category-badge cat-${p.category}">${catLabels[p.category] || p.category}</span></td>
+      <td>
+        <span class="${stockClass} fw-semibold">${p.stockQuantity} ${p.unit}</span>
+        ${isLow ? ' <i class="bi bi-exclamation-triangle-fill text-danger" style="font-size:.75rem;" title="Stoc scăzut!"></i>' : ''}
+      </td>
+      <td style="color:var(--fc-muted);">${p.purchasePrice.toFixed(2)} RON</td>
+      <td>${val} RON</td>
+      <td>
+        <div class="d-flex gap-1">
+          <button class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="openStockAdjust('${p._id}','${p.name.replace(/'/g,"\\'")}')"><i class="bi bi-arrows-collapse-vertical"></i></button>
+          <button class="btn btn-outline-secondary btn-sm py-0 px-2" onclick="openProductModal('${p._id}')"><i class="bi bi-pencil"></i></button>
+          <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteProduct('${p._id}')"><i class="bi bi-trash"></i></button>
+        </div>
+      </td>
+    </tr>`;
+  }).join('');
+}
+
+function filterStock() { renderStockTable(); }
+
+function openProductModal(id) {
+  const modal = new bootstrap.Modal(document.getElementById('productModal'));
+  if (id) {
+    const p = allProducts.find(x => x._id === id);
+    if (!p) return;
+    document.getElementById('product-modal-title').textContent = 'Editează produs';
+    document.getElementById('product-id').value = id;
+    document.getElementById('p-name').value = p.name;
+    document.getElementById('p-category').value = p.category;
+    document.getElementById('p-unit').value = p.unit;
+    document.getElementById('p-packageSize').value = p.packageSize;
+    document.getElementById('p-packageUnit').value = p.packageUnit;
+    document.getElementById('p-price').value = p.purchasePrice;
+    document.getElementById('p-stock').value = p.stockQuantity;
+    document.getElementById('p-minstock').value = p.minStock;
+    document.getElementById('p-notes').value = p.notes || '';
+  } else {
+    document.getElementById('product-modal-title').textContent = 'Produs nou';
+    document.getElementById('product-id').value = '';
+    ['p-name','p-price','p-stock','p-minstock','p-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('p-packageSize').value = 1;
+    document.getElementById('p-category').value = 'altele';
+    document.getElementById('p-unit').value = 'buc';
+  }
+  modal.show();
+}
+
+async function saveProduct() {
+  const id = document.getElementById('product-id').value;
+  const body = {
+    name: document.getElementById('p-name').value,
+    category: document.getElementById('p-category').value,
+    unit: document.getElementById('p-unit').value,
+    packageSize: parseFloat(document.getElementById('p-packageSize').value) || 1,
+    packageUnit: document.getElementById('p-packageUnit').value,
+    purchasePrice: parseFloat(document.getElementById('p-price').value) || 0,
+    stockQuantity: parseFloat(document.getElementById('p-stock').value) || 0,
+    minStock: parseFloat(document.getElementById('p-minstock').value) || 0,
+    notes: document.getElementById('p-notes').value
+  };
+  try {
+    if (id) await api('PUT', '/products/' + id, body);
+    else await api('POST', '/products', body);
+    bootstrap.Modal.getInstance(document.getElementById('productModal')).hide();
+    await loadProducts();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteProduct(id) {
+  if (!confirm('Ștergi produsul?')) return;
+  await api('DELETE', '/products/' + id);
+  await loadProducts();
+}
+
+function openStockAdjust(id, name) {
+  document.getElementById('adj-product-id').value = id;
+  document.getElementById('adj-product-name').textContent = name;
+  document.getElementById('adj-qty').value = '';
+  document.getElementById('adj-type').value = 'in';
+  new bootstrap.Modal(document.getElementById('stockModal')).show();
+}
+
+async function saveStockAdjust() {
+  const productId = document.getElementById('adj-product-id').value;
+  const type = document.getElementById('adj-type').value;
+  const quantity = parseFloat(document.getElementById('adj-qty').value);
+  const reason = document.getElementById('adj-reason').value;
+  if (!quantity || quantity <= 0) return alert('Introdu o cantitate validă');
+  try {
+    await api('POST', '/stock/movement', { productId, type, quantity, reason });
+    bootstrap.Modal.getInstance(document.getElementById('stockModal')).hide();
+    await loadProducts();
+  } catch (e) { alert(e.message); }
+}
+
+function refreshProductSelects() {
+  document.querySelectorAll('.product-select').forEach(sel => {
+    const val = sel.value;
+    sel.innerHTML = '<option value="">— Alege produs —</option>' +
+      allProducts.map(p => `<option value="${p._id}" data-price="${p.purchasePrice}" data-unit="${p.unit}">${p.name} (${p.stockQuantity} ${p.unit})</option>`).join('');
+    sel.value = val;
+  });
+}
+
+// ── INVOICES ──────────────────────────────────────────────────────────────────
+let uploadedFile = null;
+
+function previewFile(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  uploadedFile = file;
+  const img = document.getElementById('upload-preview');
+  img.src = URL.createObjectURL(file);
+  img.classList.remove('d-none');
+}
+
+function dragOver(e) { e.preventDefault(); document.getElementById('upload-zone').classList.add('drag-over'); }
+function dragLeave(e) { document.getElementById('upload-zone').classList.remove('drag-over'); }
+function dropFile(e) {
+  e.preventDefault();
+  dragLeave(e);
+  const file = e.dataTransfer.files[0];
+  if (!file) return;
+  uploadedFile = file;
+  const img = document.getElementById('upload-preview');
+  img.src = URL.createObjectURL(file);
+  img.classList.remove('d-none');
+}
+
+function clearUpload() {
+  uploadedFile = null;
+  document.getElementById('invoice-file').value = '';
+  document.getElementById('upload-preview').classList.add('d-none');
+  document.getElementById('scan-status').classList.add('d-none');
+  document.getElementById('ocr-result-section').style.display = 'none';
+}
+
+async function scanInvoice() {
+  if (!uploadedFile) return alert('Selectează mai întâi o poză cu factura');
+  const btn = document.getElementById('scan-btn');
+  const statusEl = document.getElementById('scan-status');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-fc"></span> Analizează...';
+  statusEl.className = 'mt-3 alert-fc';
+  statusEl.innerHTML = '🤖 Trimit poza la AI... aceasta poate dura 10-20 secunde.';
+  statusEl.classList.remove('d-none');
+
+  try {
+    const fd = new FormData();
+    fd.append('image', uploadedFile);
+    const data = await api('POST', '/invoices/scan', fd, true);
+    currentOcrInvoiceId = data.invoice._id;
+    showOcrResult(data.extracted, data.invoice);
+    statusEl.innerHTML = '✅ Factură analizată! Verifică și confirmă produsele de mai jos.';
+    await loadInvoices();
+  } catch (e) {
+    statusEl.className = 'mt-3 alert alert-danger';
+    statusEl.innerHTML = '❌ Eroare: ' + e.message;
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-magic"></i> Analizează cu AI';
+  }
+}
+
+function showOcrResult(extracted, invoice) {
+  document.getElementById('ocr-supplier').value = extracted.supplier || '';
+  document.getElementById('ocr-date').value = invoice.date ? new Date(invoice.date).toISOString().split('T')[0] : '';
+  document.getElementById('ocr-total').value = extracted.totalAmount || '';
+
+  const tbody = document.getElementById('ocr-items-table');
+  tbody.innerHTML = (extracted.items || []).map((item, i) => `
+    <tr>
+      <td style="font-size:.87rem;">${item.productName || '—'}</td>
+      <td>
+        <select class="form-select form-select-sm product-select" id="ocr-product-${i}">
+          <option value="">— Alege sau lasă gol —</option>
+          ${allProducts.map(p => `<option value="${p._id}">${p.name}</option>`).join('')}
+        </select>
+      </td>
+      <td><input type="number" class="form-control form-control-sm" id="ocr-qty-${i}" value="${item.quantity || ''}" style="width:70px;"></td>
+      <td><input type="number" class="form-control form-control-sm" id="ocr-price-${i}" value="${item.unitPrice || ''}" step="0.01" style="width:80px;"></td>
+      <td style="color:var(--fc-muted);font-size:.82rem;">${(item.totalPrice || 0).toFixed(2)}</td>
+    </tr>
+  `).join('');
+
+  document.getElementById('ocr-result-section').style.display = 'block';
+  document.getElementById('ocr-result-section').scrollIntoView({ behavior: 'smooth' });
+  window._ocrItemCount = (extracted.items || []).length;
+}
+
+async function confirmOcrInvoice() {
+  if (!currentOcrInvoiceId) return;
+  const items = [];
+  for (let i = 0; i < (window._ocrItemCount || 0); i++) {
+    const productId = document.getElementById('ocr-product-' + i)?.value;
+    const quantity = parseFloat(document.getElementById('ocr-qty-' + i)?.value) || 0;
+    const unitPrice = parseFloat(document.getElementById('ocr-price-' + i)?.value) || 0;
+    if (quantity > 0) {
+      const product = allProducts.find(p => p._id === productId);
+      items.push({ productId: productId || null, productName: product?.name || '', quantity, unitPrice, totalPrice: quantity * unitPrice });
+    }
+  }
+  try {
+    await api('POST', '/invoices/confirm', { invoiceId: currentOcrInvoiceId, items });
+    closeOcrResult();
+    await loadProducts();
+    await loadInvoices();
+    alert('✅ Stocul a fost actualizat!');
+  } catch (e) { alert(e.message); }
+}
+
+function closeOcrResult() {
+  document.getElementById('ocr-result-section').style.display = 'none';
+  currentOcrInvoiceId = null;
+}
+
+async function saveManualInvoice() {
+  const supplier = document.getElementById('m-supplier').value;
+  const date = document.getElementById('m-date').value;
+  const totalAmount = parseFloat(document.getElementById('m-total').value) || 0;
+  const notes = document.getElementById('m-notes').value;
+  try {
+    await api('POST', '/invoices/manual', { supplier, date, totalAmount, notes, items: [] });
+    ['m-supplier','m-total','m-notes'].forEach(id => document.getElementById(id).value = '');
+    await loadInvoices();
+    alert('✅ Factură salvată!');
+  } catch (e) { alert(e.message); }
+}
+
+async function loadInvoices() {
+  try {
+    const invoices = await api('GET', '/invoices');
+    const tbody = document.getElementById('invoices-list');
+    if (!tbody) return;
+    tbody.innerHTML = invoices.length === 0
+      ? '<tr><td colspan="5" class="text-center py-3" style="color:var(--fc-muted);">Nicio factură înregistrată</td></tr>'
+      : invoices.map(inv => `
+        <tr>
+          <td>${new Date(inv.date).toLocaleDateString('ro-RO')}</td>
+          <td>${inv.supplier || '—'}</td>
+          <td>${inv.totalAmount ? inv.totalAmount.toFixed(2) + ' RON' : '—'}</td>
+          <td><span class="badge ${inv.status === 'done' ? 'bg-success' : inv.status === 'manual' ? 'bg-secondary' : 'bg-warning text-dark'}">${inv.status}</span></td>
+          <td style="color:var(--fc-muted);font-size:.82rem;">${inv.items.length} produse</td>
+        </tr>`).join('');
+  } catch (e) { console.error(e); }
+}
+
+// ── EVENTS ────────────────────────────────────────────────────────────────────
+function addMenuItem() {
+  const div = document.createElement('div');
+  div.className = 'ingredient-row';
+  div.innerHTML = `
+    <input type="text" class="form-control form-control-sm" placeholder="ex: Prosecco welcome" style="flex:2;">
+    <input type="number" class="form-control form-control-sm" placeholder="Cant." min="0" style="max-width:70px;">
+    <input type="text" class="form-control form-control-sm" placeholder="sticle" style="max-width:70px;">
+    <button class="btn btn-outline-secondary btn-sm" onclick="this.closest('.ingredient-row').remove()"><i class="bi bi-x"></i></button>`;
+  document.getElementById('menu-items-list').appendChild(div);
+}
+
+async function analyzeEvent() {
+  const guestCount = parseInt(document.getElementById('ev-guests').value);
+  if (!guestCount || guestCount < 1) return alert('Introdu numărul de invitați!');
+
+  const btn = document.getElementById('analyze-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-fc"></span> Analizează...';
+
+  const menuRows = document.getElementById('menu-items-list').querySelectorAll('.ingredient-row');
+  const menuItems = Array.from(menuRows).map(row => {
+    const inputs = row.querySelectorAll('input');
+    return { name: inputs[0]?.value, quantity: parseFloat(inputs[1]?.value) || 0, unit: inputs[2]?.value };
+  }).filter(m => m.name);
+
+  lastEventData = {
+    guestCount,
+    durationHours: parseInt(document.getElementById('ev-hours').value) || 4,
+    eventType: document.getElementById('ev-type').value,
+    season: document.getElementById('ev-season').value,
+    briefText: document.getElementById('ev-brief').value,
+    menuItems
+  };
+
+  try {
+    const data = await api('POST', '/events/analyze', lastEventData);
+    lastAiAnalysis = data.analysis;
+    renderEventAnalysis(data.analysis);
+  } catch (e) {
+    alert('Eroare AI: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-magic"></i> Analizează cu AI';
+  }
+}
+
+function renderEventAnalysis(a) {
+  if (!a) return;
+  const resultEl = document.getElementById('ev-ai-result');
+  document.getElementById('ev-summary').innerHTML = a.summary || '';
+
+  const warnEl = document.getElementById('ev-warnings');
+  warnEl.innerHTML = (a.warnings || []).map(w => `<div class="ai-warning mb-2"><i class="bi bi-exclamation-triangle"></i> ${w}</div>`).join('');
+
+  const recEl = document.getElementById('ev-recommendations');
+  recEl.innerHTML = (a.recommendations || []).map(r => `
+    <div class="rec-card">
+      <div class="d-flex justify-content-between align-items-start">
+        <div>
+          <div class="fw-semibold">${r.productName}</div>
+          <div style="color:var(--fc-muted);font-size:.82rem;">${r.reason || ''}</div>
+          ${r.warningMessage ? `<div class="text-warning mt-1" style="font-size:.82rem;"><i class="bi bi-exclamation-triangle"></i> ${r.warningMessage}</div>` : ''}
+        </div>
+        <div class="text-end">
+          <div class="qty">${r.recommendedQuantity}</div>
+          <div style="color:var(--fc-muted);font-size:.8rem;">${r.recommendedUnit}</div>
+          ${r.estimatedConsumptionL ? `<div style="color:var(--fc-muted);font-size:.78rem;">~${r.estimatedConsumptionL}L total</div>` : ''}
+        </div>
+      </div>
+    </div>`).join('');
+
+  resultEl.classList.remove('d-none');
+  resultEl.scrollIntoView({ behavior: 'smooth' });
+}
+
+function openEventModal() {
+  document.getElementById('e-date').value = '';
+  document.getElementById('e-name').value = '';
+  document.getElementById('e-client').value = '';
+  document.getElementById('e-offer').value = '';
+  document.getElementById('e-notes').value = '';
+  new bootstrap.Modal(document.getElementById('eventModal')).show();
+}
+
+function saveEventFromAnalysis() {
+  if (lastEventData) {
+    document.getElementById('e-name').value = document.getElementById('ev-brief').value.substring(0, 50);
+  }
+  new bootstrap.Modal(document.getElementById('eventModal')).show();
+}
+
+async function saveEvent() {
+  const name = document.getElementById('e-name').value;
+  if (!name) return alert('Introdu numele evenimentului');
+
+  const body = {
+    name,
+    client: document.getElementById('e-client').value,
+    date: document.getElementById('e-date').value || null,
+    offeredPrice: parseFloat(document.getElementById('e-offer').value) || 0,
+    status: document.getElementById('e-status').value,
+    notes: document.getElementById('e-notes').value,
+    guestCount: lastEventData?.guestCount || 0,
+    durationHours: lastEventData?.durationHours || 4,
+    eventType: lastEventData?.eventType || 'altele',
+    season: lastEventData?.season || 'vara',
+    briefText: lastEventData?.briefText || '',
+    menuItems: lastEventData?.menuItems || [],
+    aiAnalysis: lastAiAnalysis ? JSON.stringify(lastAiAnalysis) : '',
+    recommendations: lastAiAnalysis?.recommendations || []
+  };
+
+  try {
+    await api('POST', '/events', body);
+    bootstrap.Modal.getInstance(document.getElementById('eventModal')).hide();
+    await loadEvents();
+    lastAiAnalysis = null; lastEventData = null;
+  } catch (e) { alert(e.message); }
+}
+
+async function loadEvents() {
+  try {
+    const events = await api('GET', '/events');
+    const tbody = document.getElementById('events-list');
+    if (!tbody) return;
+    const statusColors = { draft: 'secondary', oferta: 'warning text-dark', confirmat: 'success', finalizat: 'info' };
+    tbody.innerHTML = events.length === 0
+      ? '<tr><td colspan="7" class="text-center py-3" style="color:var(--fc-muted);">Niciun eveniment salvat</td></tr>'
+      : events.map(e => `
+        <tr>
+          <td class="fw-semibold">${e.name}</td>
+          <td style="color:var(--fc-muted);">${e.client || '—'}</td>
+          <td style="color:var(--fc-muted);">${e.date ? new Date(e.date).toLocaleDateString('ro-RO') : '—'}</td>
+          <td>${e.guestCount || '—'}</td>
+          <td><span class="badge bg-${statusColors[e.status] || 'secondary'}">${e.status}</span></td>
+          <td>${e.offeredPrice ? e.offeredPrice.toFixed(0) + ' RON' : '—'}</td>
+          <td>
+            <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteEvent('${e._id}')"><i class="bi bi-trash"></i></button>
+          </td>
+        </tr>`).join('');
+  } catch (e) { console.error(e); }
+}
+
+async function deleteEvent(id) {
+  if (!confirm('Ștergi evenimentul?')) return;
+  await api('DELETE', '/events/' + id);
+  await loadEvents();
+}
+
+// ── RECIPES ───────────────────────────────────────────────────────────────────
+async function loadRecipes() {
+  try {
+    const recipes = await api('GET', '/recipes');
+    const grid = document.getElementById('recipes-grid');
+    if (recipes.length === 0) {
+      grid.innerHTML = '<div class="col-12 text-center py-4" style="color:var(--fc-muted);">Nicio rețetă adăugată. Adaugă prima ta rețetă de cocktail!</div>';
+      return;
+    }
+    grid.innerHTML = recipes.map(r => `
+      <div class="col-md-4 col-sm-6">
+        <div class="fc-card h-100">
+          <div class="d-flex justify-content-between align-items-start">
+            <div>
+              <div class="fw-semibold">${r.name}</div>
+              <span class="category-badge cat-${r.category === 'cocktail' ? 'alcool' : r.category === 'cafea' ? 'cafea' : 'soft'} mt-1 d-inline-block">${r.category}</span>
+            </div>
+            <div class="text-end">
+              ${r.sellingPrice ? `<div class="fw-semibold" style="color:var(--fc-primary);">${r.sellingPrice} RON</div><div style="color:var(--fc-muted);font-size:.75rem;">vânzare</div>` : ''}
+            </div>
+          </div>
+          <div class="mt-2" style="color:var(--fc-muted);font-size:.82rem;">${r.servingSizeMl}ml · ${r.ingredients.length} ingrediente</div>
+          ${r.notes ? `<div style="color:var(--fc-muted);font-size:.8rem;margin-top:6px;">${r.notes}</div>` : ''}
+          <div class="d-flex gap-1 mt-3">
+            <button class="btn btn-outline-secondary btn-sm" onclick="openRecipeModal('${r._id}')"><i class="bi bi-pencil"></i></button>
+            <button class="btn btn-outline-danger btn-sm" onclick="deleteRecipe('${r._id}')"><i class="bi bi-trash"></i></button>
+          </div>
+        </div>
+      </div>`).join('');
+  } catch (e) { console.error(e); }
+}
+
+function addRecipeIngredient(productId, productName, qty, unit) {
+  const div = document.createElement('div');
+  div.className = 'ingredient-row';
+  div.innerHTML = `
+    <select class="form-select form-select-sm product-select" onchange="previewRecipeCost()">
+      <option value="">— Ingredient —</option>
+      ${allProducts.map(p => `<option value="${p._id}" data-price="${p.purchasePrice}" data-unit="${p.unit}" ${p._id === productId ? 'selected' : ''}>${p.name}</option>`).join('')}
+    </select>
+    <input type="number" class="form-control form-control-sm" placeholder="Cant." min="0" step="0.001" style="max-width:80px;" value="${qty || ''}" oninput="previewRecipeCost()">
+    <select class="form-select form-select-sm" style="max-width:70px;">
+      ${['ml','cl','L','g','kg','buc'].map(u => `<option ${u === (unit || 'ml') ? 'selected' : ''}>${u}</option>`).join('')}
+    </select>
+    <button class="btn btn-outline-secondary btn-sm" onclick="this.closest('.ingredient-row').remove(); previewRecipeCost()"><i class="bi bi-x"></i></button>`;
+  document.getElementById('recipe-ingredients').appendChild(div);
+}
+
+function previewRecipeCost() {
+  let cost = 0;
+  document.querySelectorAll('#recipe-ingredients .ingredient-row').forEach(row => {
+    const sel = row.querySelector('select.product-select');
+    const qty = parseFloat(row.querySelectorAll('input')[0]?.value) || 0;
+    const unit = row.querySelectorAll('select')[1]?.value || 'ml';
+    if (!sel?.value) return;
+    const opt = sel.options[sel.selectedIndex];
+    const price = parseFloat(opt.dataset.price) || 0;
+    const packageSize = parseFloat(allProducts.find(p=>p._id===sel.value)?.packageSize || 1);
+    const pricePerUnit = price / packageSize;
+    let qtyInBase = qty;
+    if (unit === 'ml') qtyInBase = qty / 1000;
+    else if (unit === 'cl') qtyInBase = qty / 100;
+    else if (unit === 'g') qtyInBase = qty / 1000;
+    cost += pricePerUnit * qtyInBase;
+  });
+  const el = document.getElementById('recipe-cost-preview');
+  if (el) el.textContent = cost.toFixed(2) + ' RON';
+}
+
+function openRecipeModal(id) {
+  document.getElementById('recipe-ingredients').innerHTML = '';
+  if (id) {
+    api('GET', '/recipes').then(recipes => {
+      const r = recipes.find(x => x._id === id);
+      if (!r) return;
+      document.getElementById('recipe-modal-title').textContent = 'Editează rețetă';
+      document.getElementById('recipe-id').value = id;
+      document.getElementById('r-name').value = r.name;
+      document.getElementById('r-category').value = r.category;
+      document.getElementById('r-serving').value = r.servingSizeMl;
+      document.getElementById('r-price').value = r.sellingPrice;
+      document.getElementById('r-notes').value = r.notes || '';
+      (r.ingredients || []).forEach(ing => addRecipeIngredient(ing.productId, ing.productName, ing.quantity, ing.unit));
+    });
+  } else {
+    document.getElementById('recipe-modal-title').textContent = 'Rețetă nouă';
+    document.getElementById('recipe-id').value = '';
+    ['r-name','r-price','r-notes'].forEach(id => document.getElementById(id).value = '');
+    document.getElementById('r-serving').value = 250;
+    addRecipeIngredient();
+  }
+  new bootstrap.Modal(document.getElementById('recipeModal')).show();
+}
+
+async function saveRecipe() {
+  const ingredients = [];
+  document.querySelectorAll('#recipe-ingredients .ingredient-row').forEach(row => {
+    const sel = row.querySelector('select.product-select');
+    const qty = parseFloat(row.querySelectorAll('input')[0]?.value) || 0;
+    const unit = row.querySelectorAll('select')[1]?.value || 'ml';
+    if (sel?.value && qty > 0) {
+      const p = allProducts.find(x => x._id === sel.value);
+      ingredients.push({ productId: sel.value, productName: p?.name || '', quantity: qty, unit });
+    }
+  });
+
+  const body = {
+    name: document.getElementById('r-name').value,
+    category: document.getElementById('r-category').value,
+    servingSizeMl: parseInt(document.getElementById('r-serving').value) || 250,
+    sellingPrice: parseFloat(document.getElementById('r-price').value) || 0,
+    notes: document.getElementById('r-notes').value,
+    ingredients
+  };
+
+  const id = document.getElementById('recipe-id').value;
+  try {
+    if (id) await api('PUT', '/recipes/' + id, body);
+    else await api('POST', '/recipes', body);
+    bootstrap.Modal.getInstance(document.getElementById('recipeModal')).hide();
+    await loadRecipes();
+  } catch (e) { alert(e.message); }
+}
+
+async function deleteRecipe(id) {
+  if (!confirm('Ștergi rețeta?')) return;
+  await api('DELETE', '/recipes/' + id);
+  await loadRecipes();
+}
+
+// ── CALCULATOR ────────────────────────────────────────────────────────────────
+function initCalculator() {
+  refreshProductSelects();
+  recalculate();
+}
+
+function addCalcItem() {
+  const div = document.createElement('div');
+  div.className = 'ingredient-row';
+  div.innerHTML = `
+    <select class="form-select form-select-sm product-select" onchange="updateCalcItem(this); recalculate()">
+      <option value="">— Alege produs —</option>
+      ${allProducts.map(p => `<option value="${p._id}" data-price="${p.purchasePrice}" data-unit="${p.unit}">${p.name}</option>`).join('')}
+    </select>
+    <input type="number" class="form-control form-control-sm" placeholder="Cant." min="0" step="0.1" style="max-width:80px;" oninput="recalculate()">
+    <select class="form-select form-select-sm" style="max-width:80px;">
+      <option>buc</option><option>bax</option><option>kg</option><option>L</option>
+    </select>
+    <button class="btn btn-outline-secondary btn-sm" onclick="this.closest('.ingredient-row').remove(); recalculate()"><i class="bi bi-x"></i></button>`;
+  document.getElementById('calc-items').appendChild(div);
+}
+
+function updateCalcItem(sel) {
+  const opt = sel.options[sel.selectedIndex];
+  if (opt.dataset.unit) {
+    const unitSel = sel.closest('.ingredient-row').querySelectorAll('select')[1];
+    if (unitSel) unitSel.value = opt.dataset.unit;
+  }
+}
+
+function recalculate() {
+  let totalCost = 0;
+  const breakdown = [];
+  document.querySelectorAll('#calc-items .ingredient-row').forEach(row => {
+    const sel = row.querySelector('select.product-select');
+    const qty = parseFloat(row.querySelectorAll('input')[0]?.value) || 0;
+    if (!sel?.value || !qty) return;
+    const p = allProducts.find(x => x._id === sel.value);
+    if (!p) return;
+    const cost = p.purchasePrice * qty;
+    totalCost += cost;
+    breakdown.push({ name: p.name, qty, unit: p.unit, price: p.purchasePrice, total: cost });
+  });
+
+  const margin = parseFloat(document.getElementById('calc-margin')?.value) || 200;
+  const price = totalCost * (1 + margin / 100);
+  const profit = price - totalCost;
+
+  const c = document.getElementById('calc-cost'); if(c) c.textContent = totalCost.toFixed(2) + ' RON';
+  const pr = document.getElementById('calc-profit'); if(pr) pr.textContent = profit.toFixed(2) + ' RON';
+  const p2 = document.getElementById('calc-price'); if(p2) p2.textContent = price.toFixed(2) + ' RON';
+
+  const tbl = document.getElementById('calc-breakdown');
+  if (tbl) {
+    tbl.innerHTML = breakdown.length === 0
+      ? '<tr><td colspan="4" style="color:var(--fc-muted);font-size:.85rem;">Adaugă produse pentru calcul</td></tr>'
+      : breakdown.map(b => `<tr><td>${b.name}</td><td>${b.qty} ${b.unit}</td><td>${b.price.toFixed(2)} RON</td><td class="fw-semibold">${b.total.toFixed(2)} RON</td></tr>`).join('');
+  }
+}
+
+function exportExcel() {
+  window.location.href = '/api/stock/export-excel?token=' + TOKEN;
+}
+
+function exportCalc() {
+  const cost = document.getElementById('calc-cost')?.textContent;
+  const price = document.getElementById('calc-price')?.textContent;
+  const margin = document.getElementById('calc-margin')?.value;
+  let text = `OFERTĂ FLERCAFE\n${'='.repeat(40)}\n\nDetalii costuri:\n`;
+  document.querySelectorAll('#calc-breakdown tr').forEach(row => {
+    const cells = row.querySelectorAll('td');
+    if (cells.length === 4) text += `• ${cells[0].textContent}: ${cells[1].textContent} × ${cells[2].textContent} = ${cells[3].textContent}\n`;
+  });
+  text += `\n${'─'.repeat(40)}\nCost total achiziție: ${cost}\nMarjă profit: ${margin}%\nPREȚ OFERTĂ RECOMANDAT: ${price}\n`;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'oferta-flercafe.txt';
+
+  a.click();
+}
+</script>
+</body>
+</html>
