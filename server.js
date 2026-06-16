@@ -449,7 +449,20 @@ app.put('/api/events/:id/consumption', verifyToken, async (req, res) => {
     const event = await Event.findById(req.params.id);
     if (!event) return res.status(404).json({ error: 'Eveniment negăsit' });
 
-    const totalStockCost = stockConsumed.reduce((s, i) => s + (i.totalCost || 0), 0);
+    // Lookup purchase prices from DB and calculate costs automatically
+    const allProducts = await Product.find({ active: true }, 'name purchasePrice');
+    for (const item of stockConsumed) {
+      if (!item.unitPrice || item.unitPrice === 0) {
+        const prod = allProducts.find(p => p.name.toLowerCase().includes(item.productName.toLowerCase()) || item.productName.toLowerCase().includes(p.name.toLowerCase()));
+        if (prod && prod.purchasePrice) {
+          item.unitPrice = prod.purchasePrice;
+          item.totalCost = Math.round(prod.purchasePrice * (item.quantity || 0) * 100) / 100;
+        }
+      } else {
+        item.totalCost = Math.round((item.unitPrice || 0) * (item.quantity || 0) * 100) / 100;
+      }
+    }
+    const totalStockCost = Math.round(stockConsumed.reduce((s, i) => s + (i.totalCost || 0), 0) * 100) / 100;
 
     // Șterge mișcările vechi legate de acest eveniment
     await StockMovement.deleteMany({ referenceId: req.params.id, reason: 'eveniment' });
@@ -478,7 +491,7 @@ app.put('/api/events/:id/consumption', verifyToken, async (req, res) => {
       status: 'finalizat'
     });
 
-    res.json({ ok: true, totalStockCost });
+    res.json({ ok: true, totalStockCost, stockConsumed });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

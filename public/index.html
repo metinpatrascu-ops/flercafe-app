@@ -1774,15 +1774,19 @@ async function saveConsum() {
 
   try {
     const result = await api('PUT', '/events/' + currentEventId + '/consumption', { stockConsumed });
-    currentEventData.stockConsumed = stockConsumed;
+    // Use server-returned data (includes prices looked up from DB)
+    currentEventData.stockConsumed = result.stockConsumed || stockConsumed;
     currentEventData.totalStockCost = result.totalStockCost;
+
+    // Switch to Financiar tab and render immediately
     renderFinanciar(currentEventData);
+    switchEdTab('financiar', document.querySelector('[onclick*="financiar"]'));
 
     const toast = document.createElement('div');
-    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#242424;border:1px solid #64c864;color:#e0e0e0;padding:14px 20px;border-radius:12px;z-index:9999;';
-    toast.innerHTML = '✅ Consumul a fost salvat și stocul actualizat!';
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#242424;border:1px solid #64c864;color:#e0e0e0;padding:14px 20px;border-radius:12px;z-index:9999;font-size:.9rem;';
+    toast.innerHTML = `✅ Consumul salvat! Cost stoc: <strong style="color:#C8A96E;">${result.totalStockCost?.toFixed(2)} RON</strong>`;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 3500);
+    setTimeout(() => toast.remove(), 4000);
     await loadEvents();
   } catch(e) { alert('Eroare: ' + e.message); }
 }
