@@ -20,7 +20,9 @@ if (HAS_OPENAI) {
 }
 
 // ─── MONGOOSE ──────────────────────────────────────────────────────────────
-mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flercafe');
+mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flercafe')
+  .then(() => console.log('MongoDB conectat'))
+  .catch(err => console.error('MongoDB eroare conectare:', err.message));
 
 const UserSchema = new mongoose.Schema({
   name: String,
@@ -797,5 +799,9 @@ app.get('/api/dashboard', verifyToken, async (req, res) => {
 });
 
 // ─── START ──────────────────────────────────────────────────────────────────
+process.on('unhandledRejection', (err) => {
+  console.error('Unhandled rejection:', err.message || err);
+});
+
 const PORT = process.env.PORT || 3001;
 app.listen(PORT, () => console.log(`flērcafē server pornit pe http://localhost:${PORT}`));
