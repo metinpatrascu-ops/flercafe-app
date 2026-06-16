@@ -137,6 +137,18 @@ const upload = multer({
   }
 });
 
+const uploadExcel = multer({
+  dest: 'public/uploads/',
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = file.mimetype.includes('spreadsheet') ||
+                file.mimetype.includes('excel') ||
+                file.originalname.match(/\.(xlsx|xls)$/i);
+    if (ok) cb(null, true);
+    else cb(new Error('Doar fișiere Excel (.xlsx, .xls) sunt acceptate'));
+  }
+});
+
 // ─── AUTH MIDDLEWARE ────────────────────────────────────────────────────────
 function verifyToken(req, res, next) {
   const auth = req.headers.authorization || (req.query.token ? `Bearer ${req.query.token}` : null);
@@ -594,7 +606,7 @@ RETURNEAZĂ STRICT JSON:
 });
 
 // ─── STOCK ──────────────────────────────────────────────────────────────────
-app.post('/api/stock/import-excel', verifyToken, upload.single('file'), async (req, res) => {
+app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ error: 'Niciun fișier încărcat' });
 
