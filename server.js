@@ -614,8 +614,7 @@ app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), asy
     await wb.xlsx.readFile(req.file.path);
     fs.unlinkSync(req.file.path);
 
-    const ws = wb.worksheets[0];
-    if (!ws) return res.status(400).json({ error: 'Fișierul Excel nu conține niciun sheet' });
+    if (!wb.worksheets.length) return res.status(400).json({ error: 'Fișierul Excel nu conține niciun sheet' });
 
     const catMap = {
       'apă': 'apa', 'apa': 'apa', 'water': 'apa',
@@ -624,83 +623,217 @@ app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), asy
       'sirop': 'sirop', 'syrup': 'sirop',
       'cafea': 'cafea', 'coffee': 'cafea',
       'consumabile': 'consumabile', 'consumable': 'consumabile',
-      'altele': 'altele', 'other': 'altele', 'others': 'altele'
+      'altele': 'altele', 'other': 'altele'
     };
-
     const normalizeCat = (val) => {
       if (!val) return 'altele';
       const v = val.toString().toLowerCase().trim();
       return catMap[v] || 'altele';
     };
 
-    // Detectează rândul cu header-ele (caută "Produs" sau "produs" sau "name")
-    let headerRow = 1;
-    let colMap = { name: 1, category: 2, stock: 3, unit: 4, price: 5, minStock: 7 };
+    const eventTypeMap = {
+      'corporate': 'corporate', 'lansare': 'lansare', 'launch': 'lansare',
+      'nunta': 'nunta', 'nuntă': 'nunta', 'wedding': 'nunta',
+      'party': 'party', 'festival': 'party', 'petrecere': 'party',
+    };
+    const normalizeEventType = (val) => {
+      if (!val) return 'altele';
+      const v = val.toString().toLowerCase().trim();
+      for (const [k, mapped] of Object.entries(eventTypeMap)) {
+        if (v.includes(k)) return mapped;
+      }
+      return 'altele';
+    };
 
-    ws.eachRow((row, rowNum) => {
-      if (rowNum > 5) return;
-      row.eachCell((cell, colNum) => {
-        const v = (cell.value || '').toString().toLowerCase().trim();
-        if (v.includes('produs') || v === 'name' || v === 'denumire') {
-          headerRow = rowNum;
-          colMap.name = colNum;
-        }
-        if (v.includes('categor')) colMap.category = colNum;
-        if (v.includes('stoc actual') || v === 'stoc' || v === 'stock') colMap.stock = colNum;
-        if (v === 'unitate' || v === 'unit' || v === 'um') colMap.unit = colNum;
-        if (v.includes('preț') || v.includes('pret') || v.includes('price')) colMap.price = colNum;
-        if (v.includes('minim') || v.includes('min')) colMap.minStock = colNum;
+    const parseDate = (val) => {
+      if (!val) return null;
+      if (val instanceof Date) return val;
+      const s = val.toString().trim();
+      // dd.mm.yyyy / dd/mm/yyyy / yyyy-mm-dd
+      const m1 = s.match(/^(\d{1,2})[./](\d{1,2})[./](\d{4})$/);
+      if (m1) return new Date(`${m1[3]}-${m1[2].padStart(2,'0')}-${m1[1].padStart(2,'0')}`);
+      const m2 = s.match(/^(\d{4})-(\d{2})-(\d{2})/);
+      if (m2) return new Date(s);
+      const parsed = new Date(s);
+      return isNaN(parsed) ? null : parsed;
+    };
+
+    const getCellVal = (row, col) => {
+      const cell = row.getCell(col);
+      if (!cell?.value) return '';
+      if (cell.value?.text) return cell.value.text.toString().trim(); // rich text
+      return cell.value.toString().trim();
+    };
+    const getCellNum = (row, col) => {
+      const cell = row.getCell(col);
+      if (!cell?.value) return 0;
+      const v = parseFloat(cell.value.toString().replace(/[^\d.,-]/g, '').replace(',', '.'));
+      return isNaN(v) ? 0 : v;
+    };
+
+    // ── detectare tip sheet ──────────────────────────────────────────────
+    const isInventarSheet = (ws) => {
+      let score = 0;
+      ws.eachRow((row, rn) => {
+        if (rn > 4) return;
+        row.eachCell(cell => {
+          const v = (cell.value || '').toString().toLowerCase();
+          if (v.includes('produs') || v.includes('stoc') || v.includes('unitate')) score += 2;
+          if (v.includes('preț') || v.includes('pret') || v.includes('categor')) score++;
+        });
       });
-    });
+      return score >= 2;
+    };
+    const isEvenimenteSheet = (ws) => {
+      let score = 0;
+      ws.eachRow((row, rn) => {
+        if (rn > 4) return;
+        row.eachCell(cell => {
+          const v = (cell.value || '').toString().toLowerCase();
+          if (v.includes('eveniment') || v.includes('event') || v.includes('client')) score += 2;
+          if (v.includes('invita') || v.includes('persoane') || v.includes('data') || v.includes('dată')) score++;
+        });
+      });
+      return score >= 2;
+    };
 
-    const results = { created: 0, updated: 0, skipped: 0, errors: [] };
+    // ── import inventar ──────────────────────────────────────────────────
+    const importInventar = async (ws) => {
+      let headerRow = 1;
+      let colMap = { name: 1, category: 2, stock: 3, unit: 4, price: 5, minStock: 7 };
 
-    for (let r = headerRow + 1; r <= ws.rowCount; r++) {
-      const row = ws.getRow(r);
-      const getName = (col) => {
-        const cell = row.getCell(col);
-        return cell?.value != null ? cell.value.toString().trim() : '';
+      ws.eachRow((row, rowNum) => {
+        if (rowNum > 5) return;
+        row.eachCell((cell, colNum) => {
+          const v = (cell.value || '').toString().toLowerCase().trim();
+          if (v.includes('produs') || v === 'name' || v === 'denumire') { headerRow = rowNum; colMap.name = colNum; }
+          if (v.includes('categor')) colMap.category = colNum;
+          if (v.includes('stoc actual') || v === 'stoc' || v === 'stock quantity') colMap.stock = colNum;
+          if (v === 'unitate' || v === 'unit' || v === 'um') colMap.unit = colNum;
+          if ((v.includes('preț') || v.includes('pret') || v.includes('price')) && !v.includes('ofert')) colMap.price = colNum;
+          if (v.includes('minim') || v.includes('min stock')) colMap.minStock = colNum;
+        });
+      });
+
+      let created = 0, updated = 0, skipped = 0, errors = [];
+      for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r);
+        const name = getCellVal(row, colMap.name);
+        if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('flērc') || name.toLowerCase().includes('flercafe')) continue;
+        try {
+          const data = {
+            name, category: normalizeCat(getCellVal(row, colMap.category)),
+            stockQuantity: getCellNum(row, colMap.stock),
+            unit: getCellVal(row, colMap.unit) || 'buc',
+            purchasePrice: getCellNum(row, colMap.price),
+            minStock: getCellNum(row, colMap.minStock), active: true
+          };
+          const existing = await Product.findOne({ name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}$`, 'i') }, active: true });
+          if (existing) { await Product.findByIdAndUpdate(existing._id, data); updated++; }
+          else { await Product.create(data); created++; }
+        } catch (e) { errors.push(`Inv rând ${r}: ${e.message}`); skipped++; }
+      }
+      return { created, updated, skipped, errors };
+    };
+
+    // ── import evenimente ────────────────────────────────────────────────
+    const importEvenimente = async (ws) => {
+      let headerRow = 1;
+      let colMap = { name: 1, client: 2, date: 3, guests: 4, type: 5, status: 6, price: 7, notes: 8 };
+
+      ws.eachRow((row, rowNum) => {
+        if (rowNum > 5) return;
+        row.eachCell((cell, colNum) => {
+          const v = (cell.value || '').toString().toLowerCase().trim();
+          if (v.includes('eveniment') || v.includes('denumire') || v === 'event' || v === 'name') { headerRow = rowNum; colMap.name = colNum; }
+          if (v === 'client' || v.includes('organizator') || v.includes('firma')) colMap.client = colNum;
+          if (v.includes('data') || v.includes('dată') || v === 'date') colMap.date = colNum;
+          if (v.includes('invitat') || v.includes('persoane') || v.includes('guests') || v.includes('nr.')) colMap.guests = colNum;
+          if (v === 'tip' || v === 'type' || v.includes('tip event')) colMap.type = colNum;
+          if (v === 'status' || v === 'stare') colMap.status = colNum;
+          if (v.includes('preț') || v.includes('pret') || v.includes('ofert') || v.includes('price')) colMap.price = colNum;
+          if (v.includes('note') || v.includes('observ') || v.includes('mentiu')) colMap.notes = colNum;
+        });
+      });
+
+      const statusMap = {
+        'draft': 'draft', 'oferta': 'oferta', 'ofertă': 'oferta', 'trimis': 'oferta',
+        'confirmat': 'confirmat', 'confirmed': 'confirmat', 'da': 'confirmat',
+        'finalizat': 'finalizat', 'done': 'finalizat', 'gata': 'finalizat'
       };
-      const getNum = (col) => {
-        const cell = row.getCell(col);
-        if (!cell?.value) return 0;
-        const v = parseFloat(cell.value.toString().replace(',', '.'));
-        return isNaN(v) ? 0 : v;
+      const normalizeStatus = (v) => {
+        if (!v) return 'draft';
+        const s = v.toString().toLowerCase().trim();
+        return statusMap[s] || 'draft';
       };
 
-      const name = getName(colMap.name);
-      if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('flērc')) continue;
+      let created = 0, updated = 0, skipped = 0, errors = [];
+      for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r);
+        const name = getCellVal(row, colMap.name);
+        if (!name || name.toLowerCase().includes('total')) continue;
+        try {
+          const eventDate = parseDate(ws.getRow(r).getCell(colMap.date)?.value);
+          const data = {
+            name,
+            client: getCellVal(row, colMap.client),
+            date: eventDate,
+            guestCount: getCellNum(row, colMap.guests) || 0,
+            eventType: normalizeEventType(getCellVal(row, colMap.type)),
+            status: normalizeStatus(getCellVal(row, colMap.status)),
+            offeredPrice: getCellNum(row, colMap.price),
+            notes: getCellVal(row, colMap.notes),
+            briefText: `Importat din Excel. Client: ${getCellVal(row, colMap.client)}`
+          };
+          const existing = await Event.findOne({ name: { $regex: new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}$`, 'i') } });
+          if (existing) { await Event.findByIdAndUpdate(existing._id, data); updated++; }
+          else { await Event.create(data); created++; }
+        } catch (e) { errors.push(`Ev rând ${r}: ${e.message}`); skipped++; }
+      }
+      return { created, updated, skipped, errors };
+    };
 
-      try {
-        const productData = {
-          name,
-          category: normalizeCat(getName(colMap.category)),
-          stockQuantity: getNum(colMap.stock),
-          unit: getName(colMap.unit) || 'buc',
-          purchasePrice: getNum(colMap.price),
-          minStock: getNum(colMap.minStock),
-          active: true
-        };
+    // ── procesează toate sheet-urile ─────────────────────────────────────
+    const results = {
+      produse: { created: 0, updated: 0, skipped: 0 },
+      evenimente: { created: 0, updated: 0, skipped: 0 },
+      errors: []
+    };
 
-        const existing = await Product.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') }, active: true });
-        if (existing) {
-          await Product.findByIdAndUpdate(existing._id, productData);
-          results.updated++;
-        } else {
-          await Product.create(productData);
-          results.created++;
-        }
-      } catch (e) {
-        results.errors.push(`Rândul ${r}: ${e.message}`);
-        results.skipped++;
+    for (const ws of wb.worksheets) {
+      const sheetName = ws.name.toLowerCase();
+      const looksLikeInv = isInventarSheet(ws);
+      const looksLikeEv = isEvenimenteSheet(ws);
+
+      if (sheetName.includes('eveniment') || sheetName.includes('event') || sheetName.includes('calendar') || (looksLikeEv && !looksLikeInv)) {
+        const r = await importEvenimente(ws);
+        results.evenimente.created += r.created;
+        results.evenimente.updated += r.updated;
+        results.evenimente.skipped += r.skipped;
+        results.errors.push(...r.errors);
+      } else if (looksLikeInv || sheetName.includes('inventar') || sheetName.includes('stoc') || sheetName.includes('stock')) {
+        const r = await importInventar(ws);
+        results.produse.created += r.created;
+        results.produse.updated += r.updated;
+        results.produse.skipped += r.skipped;
+        results.errors.push(...r.errors);
+      } else if (looksLikeEv) {
+        const r = await importEvenimente(ws);
+        results.evenimente.created += r.created;
+        results.evenimente.updated += r.updated;
+        results.evenimente.skipped += r.skipped;
+        results.errors.push(...r.errors);
       }
     }
 
-    res.json({
-      ok: true,
-      message: `Import finalizat: ${results.created} produse noi, ${results.updated} actualizate${results.skipped ? `, ${results.skipped} sărite` : ''}.`,
-      ...results
-    });
+    const parts = [];
+    if (results.produse.created || results.produse.updated)
+      parts.push(`📦 Produse: ${results.produse.created} noi, ${results.produse.updated} actualizate`);
+    if (results.evenimente.created || results.evenimente.updated)
+      parts.push(`📅 Evenimente: ${results.evenimente.created} noi, ${results.evenimente.updated} actualizate`);
+    if (!parts.length) parts.push('Nu am detectat date de importat. Verifică formatul fișierului.');
+
+    res.json({ ok: true, message: parts.join(' · '), results });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
