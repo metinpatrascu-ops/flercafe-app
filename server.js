@@ -1405,10 +1405,25 @@ app.post('/api/offers/pdf', verifyToken, async (req, res) => {
   }
 });
 
+// ─── HEALTH ─────────────────────────────────────────────────────────────────
+app.get('/api/health', (req, res) => res.json({ ok: true, ts: Date.now() }));
+
 // ─── START ──────────────────────────────────────────────────────────────────
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err.message || err);
 });
 
 const PORT = process.env.PORT || 3001;
-app.listen(PORT, () => console.log(`flērcafē server pornit pe http://localhost:${PORT}`));
+app.listen(PORT, () => {
+  console.log(`flērcafē server pornit pe http://localhost:${PORT}`);
+
+  // Self-ping every 14 min to prevent Render free tier from sleeping
+  const selfUrl = process.env.RENDER_EXTERNAL_URL;
+  if (selfUrl) {
+    const https = require('https');
+    setInterval(() => {
+      https.get(`${selfUrl}/api/health`, r => r.resume()).on('error', () => {});
+    }, 14 * 60 * 1000);
+    console.log(`Keep-alive activ → ${selfUrl}/api/health`);
+  }
+});

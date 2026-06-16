@@ -1017,6 +1017,9 @@ let lastEventData = null;
 
 // ── INIT ────────────────────────────────────────────────────────────────────
 window.onload = () => {
+  // Ping server immediately so cold start happens while user types credentials
+  fetch('/api/health').catch(() => {});
+
   if (TOKEN) {
     showApp();
   } else {
