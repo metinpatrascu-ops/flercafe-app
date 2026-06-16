@@ -479,10 +479,10 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
         <div class="table-responsive">
           <table class="table">
             <thead>
-              <tr><th>Eveniment</th><th>Client</th><th>Data</th><th>Invitați</th><th>Status</th><th>Ofertă</th><th></th></tr>
+              <tr><th>Eveniment</th><th>Client</th><th>Data</th><th>Invitați</th><th>Status</th><th>Cost stoc</th><th>Ofertă</th><th>Profit</th><th></th></tr>
             </thead>
             <tbody id="events-list">
-              <tr><td colspan="7" class="text-center py-3" style="color:var(--fc-muted);">Se încarcă...</td></tr>
+              <tr><td colspan="9" class="text-center py-3" style="color:var(--fc-muted);">Se încarcă...</td></tr>
             </tbody>
           </table>
         </div>
@@ -1656,7 +1656,7 @@ async function loadEvents() {
     if (!tbody) return;
     const statusColors = { draft: 'secondary', oferta: 'warning text-dark', confirmat: 'success', finalizat: 'info' };
     tbody.innerHTML = events.length === 0
-      ? '<tr><td colspan="7" class="text-center py-3" style="color:var(--fc-muted);">Niciun eveniment salvat</td></tr>'
+      ? '<tr><td colspan="9" class="text-center py-3" style="color:var(--fc-muted);">Niciun eveniment salvat</td></tr>'
       : events.map(e => `
         <tr style="cursor:pointer;" onclick="openEventDetail('${e._id}')" title="Click pentru detalii consum">
           <td class="fw-semibold">${e.name}</td>
@@ -1664,7 +1664,9 @@ async function loadEvents() {
           <td style="color:var(--fc-muted);">${e.date ? new Date(e.date).toLocaleDateString('ro-RO') : '—'}</td>
           <td>${e.guestCount || '—'}</td>
           <td><span class="badge bg-${statusColors[e.status] || 'secondary'}">${e.status}</span></td>
+          <td style="color:#ffb432;font-weight:600;">${e.totalStockCost ? e.totalStockCost.toFixed(0) + ' RON' : '—'}</td>
           <td>${e.offeredPrice ? e.offeredPrice.toFixed(0) + ' RON' : '—'}</td>
+          <td style="color:${e.offeredPrice && e.totalStockCost ? (e.offeredPrice - e.totalStockCost > 0 ? '#64c864' : '#ff6464') : 'var(--fc-muted)'}; font-weight:600;">${e.offeredPrice && e.totalStockCost ? (e.offeredPrice - e.totalStockCost).toFixed(0) + ' RON' : '—'}</td>
           <td>
             <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="event.stopPropagation(); deleteEvent('${e._id}')"><i class="bi bi-trash"></i></button>
           </td>
