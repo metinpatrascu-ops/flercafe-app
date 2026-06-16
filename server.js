@@ -594,6 +594,106 @@ RETURNEAZĂ STRICT JSON:
 });
 
 // ─── STOCK ──────────────────────────────────────────────────────────────────
+app.post('/api/stock/import-excel', verifyToken, upload.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Niciun fișier încărcat' });
+
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.readFile(req.file.path);
+    fs.unlinkSync(req.file.path);
+
+    const ws = wb.worksheets[0];
+    if (!ws) return res.status(400).json({ error: 'Fișierul Excel nu conține niciun sheet' });
+
+    const catMap = {
+      'apă': 'apa', 'apa': 'apa', 'water': 'apa',
+      'soft': 'soft', 'soft drinks': 'soft', 'cola': 'soft', 'suc': 'soft',
+      'alcool': 'alcool', 'alcohol': 'alcool', 'vin': 'alcool', 'bere': 'alcool',
+      'sirop': 'sirop', 'syrup': 'sirop',
+      'cafea': 'cafea', 'coffee': 'cafea',
+      'consumabile': 'consumabile', 'consumable': 'consumabile',
+      'altele': 'altele', 'other': 'altele', 'others': 'altele'
+    };
+
+    const normalizeCat = (val) => {
+      if (!val) return 'altele';
+      const v = val.toString().toLowerCase().trim();
+      return catMap[v] || 'altele';
+    };
+
+    // Detectează rândul cu header-ele (caută "Produs" sau "produs" sau "name")
+    let headerRow = 1;
+    let colMap = { name: 1, category: 2, stock: 3, unit: 4, price: 5, minStock: 7 };
+
+    ws.eachRow((row, rowNum) => {
+      if (rowNum > 5) return;
+      row.eachCell((cell, colNum) => {
+        const v = (cell.value || '').toString().toLowerCase().trim();
+        if (v.includes('produs') || v === 'name' || v === 'denumire') {
+          headerRow = rowNum;
+          colMap.name = colNum;
+        }
+        if (v.includes('categor')) colMap.category = colNum;
+        if (v.includes('stoc actual') || v === 'stoc' || v === 'stock') colMap.stock = colNum;
+        if (v === 'unitate' || v === 'unit' || v === 'um') colMap.unit = colNum;
+        if (v.includes('preț') || v.includes('pret') || v.includes('price')) colMap.price = colNum;
+        if (v.includes('minim') || v.includes('min')) colMap.minStock = colNum;
+      });
+    });
+
+    const results = { created: 0, updated: 0, skipped: 0, errors: [] };
+
+    for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+      const row = ws.getRow(r);
+      const getName = (col) => {
+        const cell = row.getCell(col);
+        return cell?.value != null ? cell.value.toString().trim() : '';
+      };
+      const getNum = (col) => {
+        const cell = row.getCell(col);
+        if (!cell?.value) return 0;
+        const v = parseFloat(cell.value.toString().replace(',', '.'));
+        return isNaN(v) ? 0 : v;
+      };
+
+      const name = getName(colMap.name);
+      if (!name || name.toLowerCase().includes('total') || name.toLowerCase().includes('flērc')) continue;
+
+      try {
+        const productData = {
+          name,
+          category: normalizeCat(getName(colMap.category)),
+          stockQuantity: getNum(colMap.stock),
+          unit: getName(colMap.unit) || 'buc',
+          purchasePrice: getNum(colMap.price),
+          minStock: getNum(colMap.minStock),
+          active: true
+        };
+
+        const existing = await Product.findOne({ name: { $regex: new RegExp(`^${name}$`, 'i') }, active: true });
+        if (existing) {
+          await Product.findByIdAndUpdate(existing._id, productData);
+          results.updated++;
+        } else {
+          await Product.create(productData);
+          results.created++;
+        }
+      } catch (e) {
+        results.errors.push(`Rândul ${r}: ${e.message}`);
+        results.skipped++;
+      }
+    }
+
+    res.json({
+      ok: true,
+      message: `Import finalizat: ${results.created} produse noi, ${results.updated} actualizate${results.skipped ? `, ${results.skipped} sărite` : ''}.`,
+      ...results
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 app.get('/api/stock/export-excel', verifyToken, async (req, res) => {
   try {
     const products = await Product.find({ active: true }).sort({ category: 1, name: 1 });

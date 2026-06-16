@@ -237,6 +237,10 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
           <button class="btn btn-outline-secondary btn-sm" onclick="exportExcel()" title="Descarcă inventarul ca fișier Excel">
             <i class="bi bi-file-earmark-excel"></i> Export Excel
           </button>
+          <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('import-excel-file').click()" title="Importă inventar din Excel">
+            <i class="bi bi-upload"></i> Import Excel
+          </button>
+          <input type="file" id="import-excel-file" accept=".xlsx,.xls" class="d-none" onchange="importExcel(event)">
           <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="bi bi-plus"></i> Adaugă produs</button>
         </div>
       </div>
@@ -1554,6 +1558,41 @@ function recalculate() {
 
 function exportExcel() {
   window.location.href = '/api/stock/export-excel?token=' + TOKEN;
+}
+
+async function importExcel(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  const btn = document.querySelector('[onclick*="import-excel-file"]');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-fc"></span> Se importă...';
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const data = await api('POST', '/stock/import-excel', fd, true);
+
+    const color = data.errors?.length ? '#ffb432' : '#64c864';
+    const icon = data.errors?.length ? '⚠️' : '✅';
+
+    // Toast notification
+    const toast = document.createElement('div');
+    toast.style.cssText = `position:fixed;bottom:24px;right:24px;background:#242424;border:1px solid ${color};color:#e0e0e0;padding:16px 20px;border-radius:12px;z-index:9999;max-width:360px;box-shadow:0 4px 20px rgba(0,0,0,.4);`;
+    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">${icon} ${data.message}</div>
+      ${data.errors?.length ? `<div style="color:#ffb432;font-size:.8rem;margin-top:6px;">${data.errors.slice(0,3).join('<br>')}</div>` : ''}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 5000);
+
+    await loadProducts();
+  } catch (e) {
+    alert('Eroare import: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
 }
 
 function exportCalc() {
