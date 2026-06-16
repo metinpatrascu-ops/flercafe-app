@@ -1315,7 +1315,11 @@ app.post('/api/offers/pdf', verifyToken, async (req, res) => {
     const GRAY = '#666666';
 
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="Oferta-${(eventName || 'eveniment').replace(/\s+/g, '-')}-flercafe.pdf"`);
+    const safeFilename = (eventName || 'eveniment')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip diacritics
+      .replace(/[^a-zA-Z0-9\-_]/g, '-')
+      .replace(/-+/g, '-').replace(/^-|-$/g, '');
+    res.setHeader('Content-Disposition', `attachment; filename="Oferta-${safeFilename}-flercafe.pdf"`);
     doc.pipe(res);
 
     // Header bar
