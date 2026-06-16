@@ -177,6 +177,7 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
       <button class="nav-link" onclick="showPage('events')"><i class="bi bi-calendar-event"></i> Evenimente</button>
       <button class="nav-link" onclick="showPage('recipes')"><i class="bi bi-cup-hot"></i> Rețete Bar</button>
       <button class="nav-link" onclick="showPage('calculator')"><i class="bi bi-calculator"></i> Calculator</button>
+      <button class="nav-link" onclick="showPage('aichat')" style="border-top:1px solid #2a2a2a;margin-top:4px;color:#C8A96E;"><i class="bi bi-robot"></i> Robot AI ✨</button>
     </div>
     <div class="sidebar-footer">
       <div style="color:var(--fc-muted);font-size:.8rem;margin-bottom:8px;" id="sidebar-user"></div>
@@ -556,6 +557,91 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
                 <thead><tr><th>Produs</th><th>Cantitate</th><th>Preț/buc</th><th>Total</th></tr></thead>
                 <tbody id="calc-breakdown"></tbody>
               </table>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── ROBOT AI ────────────────────────────────────────────────── -->
+    <div id="page-aichat" class="page">
+      <div class="page-title"><i class="bi bi-robot" style="color:var(--fc-primary);"></i> Robot AI — Asistent Eveniment</div>
+      <div class="page-sub">Descrie evenimentul tău în cuvinte simple și primești calculul complet + oferta PDF profesională</div>
+
+      <div class="row g-3">
+        <!-- Chat column -->
+        <div class="col-lg-6">
+          <div class="fc-card" style="display:flex;flex-direction:column;min-height:520px;">
+            <div id="chat-messages" style="flex:1;overflow-y:auto;padding:4px 0;min-height:360px;max-height:400px;">
+              <div class="d-flex gap-2 mb-3">
+                <div style="width:32px;height:32px;background:var(--fc-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;">
+                  <i class="bi bi-robot" style="color:#111;font-size:.9rem;"></i>
+                </div>
+                <div style="background:#1e1e1e;border:1px solid var(--fc-border);border-radius:12px 12px 12px 0;padding:12px 14px;max-width:90%;font-size:.88rem;line-height:1.5;">
+                  Bună! Sunt asistentul AI al <strong style="color:var(--fc-primary);">flērcafē</strong> 🤖<br><br>
+                  Spune-mi despre evenimentul tău și calculez imediat ce băuturi trebuie să comanzi și la ce preț să ofertezi.<br><br>
+                  <em style="color:var(--fc-muted);">Exemplu: „Mâine am evenimentul Mercedes cu 150 de persoane, 4 ore, vor 4 tipuri de cocktailuri, apă plată, minerală, cola, socată și 20 sticle prosecco welcome"</em>
+                </div>
+              </div>
+            </div>
+            <div style="border-top:1px solid var(--fc-border);padding-top:12px;display:flex;gap:8px;align-items:flex-end;">
+              <textarea id="chat-input" class="form-control" rows="3" placeholder="Descrie evenimentul tău..." style="resize:none;font-size:.9rem;" onkeydown="if(event.ctrlKey&&event.key==='Enter')sendChatMessage()"></textarea>
+              <button class="btn btn-primary" onclick="sendChatMessage()" style="white-space:nowrap;padding:10px 16px;" id="chat-send-btn">
+                <i class="bi bi-send-fill"></i>
+              </button>
+            </div>
+            <div style="font-size:.72rem;color:var(--fc-muted);margin-top:6px;">Ctrl+Enter pentru a trimite</div>
+          </div>
+        </div>
+
+        <!-- Offer panel (appears after analysis) -->
+        <div class="col-lg-6" id="offer-panel" style="display:none;">
+          <div class="fc-card">
+            <h6 class="mb-3" style="color:var(--fc-primary);"><i class="bi bi-file-earmark-pdf"></i> Generează Ofertă PDF</h6>
+            <div class="row g-2 mb-3">
+              <div class="col-6">
+                <label class="form-label" style="font-size:.8rem;">Nume eveniment</label>
+                <input type="text" id="offer-event-name" class="form-control form-control-sm">
+              </div>
+              <div class="col-6">
+                <label class="form-label" style="font-size:.8rem;">Client</label>
+                <input type="text" id="offer-client" class="form-control form-control-sm">
+              </div>
+              <div class="col-6">
+                <label class="form-label" style="font-size:.8rem;">Data evenimentului</label>
+                <input type="date" id="offer-date" class="form-control form-control-sm">
+              </div>
+              <div class="col-3">
+                <label class="form-label" style="font-size:.8rem;">Invitați</label>
+                <input type="number" id="offer-guests" class="form-control form-control-sm" readonly>
+              </div>
+              <div class="col-3">
+                <label class="form-label" style="font-size:.8rem;">Ore</label>
+                <input type="number" id="offer-hours" class="form-control form-control-sm" readonly>
+              </div>
+            </div>
+
+            <div style="font-size:.82rem;font-weight:600;color:var(--fc-muted);margin-bottom:8px;">Prețuri de vânzare (RON)</div>
+            <div id="offer-items-table" style="max-height:260px;overflow-y:auto;">
+              <!-- rows generated by renderOfferPanel() -->
+            </div>
+
+            <div class="mt-3 d-flex justify-content-between align-items-center">
+              <div>
+                <div style="font-size:.8rem;color:var(--fc-muted);">Total ofertă</div>
+                <div id="offer-total" style="font-size:1.3rem;font-weight:700;color:var(--fc-primary);">0.00 RON</div>
+              </div>
+              <div class="d-flex gap-2">
+                <div>
+                  <label class="form-label" style="font-size:.75rem;color:var(--fc-muted);">Observații PDF</label>
+                  <input type="text" id="offer-notes" class="form-control form-control-sm" placeholder="ex: Plata 50% avans..." style="width:180px;">
+                </div>
+                <div style="align-self:flex-end;">
+                  <button class="btn btn-danger" onclick="downloadOfferPDF()" style="white-space:nowrap;">
+                    <i class="bi bi-file-earmark-pdf"></i> Descarcă PDF
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -1960,6 +2046,201 @@ function exportCalc() {
   a.download = 'oferta-flercafe.txt';
 
   a.click();
+}
+
+// ── ROBOT AI ─────────────────────────────────────────────────────────────────
+let currentOfferItems = [];
+let currentEventData = {};
+
+function addChatBubble(role, html) {
+  const wrap = document.getElementById('chat-messages');
+  const isAI = role === 'ai';
+  const bubble = document.createElement('div');
+  bubble.className = 'd-flex gap-2 mb-3' + (isAI ? '' : ' flex-row-reverse');
+  bubble.innerHTML = isAI
+    ? `<div style="width:32px;height:32px;background:var(--fc-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-robot" style="color:#111;font-size:.9rem;"></i></div>
+       <div style="background:#1e1e1e;border:1px solid var(--fc-border);border-radius:12px 12px 12px 0;padding:12px 14px;max-width:92%;font-size:.88rem;line-height:1.6;">${html}</div>`
+    : `<div style="background:var(--fc-primary);color:#111;border-radius:12px 12px 0 12px;padding:10px 14px;max-width:80%;font-size:.88rem;line-height:1.5;font-weight:500;">${html}</div>
+       <div style="width:32px;height:32px;background:#333;border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-person" style="color:#aaa;font-size:.9rem;"></i></div>`;
+  wrap.appendChild(bubble);
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+async function sendChatMessage() {
+  const input = document.getElementById('chat-input');
+  const msg = input.value.trim();
+  if (!msg) return;
+
+  addChatBubble('user', msg.replace(/</g,'&lt;'));
+  input.value = '';
+
+  const btn = document.getElementById('chat-send-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span>';
+
+  // Typing indicator
+  const typingId = 'typing-' + Date.now();
+  const wrap = document.getElementById('chat-messages');
+  wrap.insertAdjacentHTML('beforeend', `<div id="${typingId}" class="d-flex gap-2 mb-3">
+    <div style="width:32px;height:32px;background:var(--fc-primary);border-radius:50%;display:flex;align-items:center;justify-content:center;flex-shrink:0;"><i class="bi bi-robot" style="color:#111;font-size:.9rem;"></i></div>
+    <div style="background:#1e1e1e;border:1px solid var(--fc-border);border-radius:12px;padding:12px 16px;color:var(--fc-muted);font-size:.85rem;">
+      <span class="spinner-border spinner-border-sm me-2"></span>Analizez evenimentul...
+    </div></div>`);
+  wrap.scrollTop = wrap.scrollHeight;
+
+  try {
+    const data = await api('POST', '/ai/chat', { message: msg });
+    document.getElementById(typingId)?.remove();
+
+    currentEventData = data.eventData || {};
+    const a = data.analysis || {};
+
+    // Build recommendation HTML table
+    const rows = (a.recommendations || []).map(r => `
+      <tr>
+        <td style="padding:5px 8px;font-weight:500;">${r.productName}</td>
+        <td style="padding:5px 8px;text-align:center;color:var(--fc-primary);font-weight:700;">${r.recommendedQuantity}</td>
+        <td style="padding:5px 8px;font-size:.8rem;color:var(--fc-muted);">${r.recommendedUnit}</td>
+      </tr>`).join('');
+
+    const warnings = (a.warnings || []).map(w =>
+      `<div style="background:#2a1f00;border:1px solid #664;border-radius:6px;padding:7px 10px;font-size:.8rem;color:#ffb432;margin-bottom:6px;">⚠️ ${w}</div>`
+    ).join('');
+
+    addChatBubble('ai', `
+      <div style="margin-bottom:8px;">${data.reply || 'Iată calculul:'}</div>
+      ${warnings}
+      <div style="font-size:.8rem;font-weight:600;color:var(--fc-muted);margin:10px 0 4px;">📋 Necesar estimat:</div>
+      <table style="width:100%;border-collapse:collapse;">
+        <thead><tr style="border-bottom:1px solid var(--fc-border);">
+          <th style="padding:4px 8px;text-align:left;font-size:.78rem;color:var(--fc-muted);">Produs</th>
+          <th style="padding:4px 8px;text-align:center;font-size:.78rem;color:var(--fc-muted);">Cant.</th>
+          <th style="padding:4px 8px;font-size:.78rem;color:var(--fc-muted);">Unitate</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+      <div style="margin-top:12px;">
+        <button class="btn btn-sm btn-primary" onclick="openOfferPanel()">
+          <i class="bi bi-file-earmark-pdf"></i> Generează Ofertă PDF
+        </button>
+      </div>`);
+
+    // Save items for offer panel
+    currentOfferItems = (a.recommendations || []).map(r => ({
+      name: r.productName,
+      quantity: r.recommendedQuantity,
+      unit: r.recommendedUnit,
+      unitPrice: 0,
+      totalPrice: 0
+    }));
+
+  } catch (e) {
+    document.getElementById(typingId)?.remove();
+    addChatBubble('ai', `<span style="color:#ff6464;">Eroare: ${e.message}</span>`);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-send-fill"></i>';
+  }
+}
+
+function openOfferPanel() {
+  const panel = document.getElementById('offer-panel');
+  panel.style.display = 'block';
+  panel.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
+  // Pre-fill fields from extracted event data
+  document.getElementById('offer-event-name').value = currentEventData.eventName || '';
+  document.getElementById('offer-client').value = currentEventData.clientName || '';
+  document.getElementById('offer-guests').value = currentEventData.guestCount || '';
+  document.getElementById('offer-hours').value = currentEventData.durationHours || 4;
+
+  renderOfferItemsTable();
+}
+
+function renderOfferItemsTable() {
+  const el = document.getElementById('offer-items-table');
+  if (!currentOfferItems.length) { el.innerHTML = '<p style="color:var(--fc-muted);font-size:.85rem;">Nicio recomandare.</p>'; return; }
+
+  el.innerHTML = `<table style="width:100%;border-collapse:collapse;">
+    <thead><tr style="border-bottom:1px solid var(--fc-border);">
+      <th style="padding:5px;font-size:.77rem;color:var(--fc-muted);text-align:left;">Produs</th>
+      <th style="padding:5px;font-size:.77rem;color:var(--fc-muted);text-align:center;">Cant.</th>
+      <th style="padding:5px;font-size:.77rem;color:var(--fc-muted);">Preț/u (RON)</th>
+      <th style="padding:5px;font-size:.77rem;color:var(--fc-muted);text-align:right;">Total</th>
+    </tr></thead>
+    <tbody id="offer-rows"></tbody>
+  </table>`;
+
+  const tbody = document.getElementById('offer-rows');
+  currentOfferItems.forEach((item, idx) => {
+    const tr = document.createElement('tr');
+    tr.style.borderBottom = '1px solid var(--fc-border)';
+    tr.innerHTML = `
+      <td style="padding:6px 5px;font-size:.83rem;">${item.name}</td>
+      <td style="padding:6px 5px;text-align:center;font-size:.83rem;color:var(--fc-primary);font-weight:600;">${item.quantity}</td>
+      <td style="padding:4px 5px;">
+        <input type="number" class="form-control form-control-sm" min="0" step="0.5" value="${item.unitPrice}"
+          style="max-width:90px;" oninput="updateOfferRow(${idx}, this.value)">
+      </td>
+      <td style="padding:6px 5px;text-align:right;font-size:.83rem;" id="offer-row-total-${idx}">0.00 RON</td>`;
+    tbody.appendChild(tr);
+  });
+  recalcOfferTotal();
+}
+
+function updateOfferRow(idx, val) {
+  const price = parseFloat(val) || 0;
+  currentOfferItems[idx].unitPrice = price;
+  currentOfferItems[idx].totalPrice = price * (currentOfferItems[idx].quantity || 1);
+  const el = document.getElementById(`offer-row-total-${idx}`);
+  if (el) el.textContent = currentOfferItems[idx].totalPrice.toFixed(2) + ' RON';
+  recalcOfferTotal();
+}
+
+function recalcOfferTotal() {
+  const total = currentOfferItems.reduce((s, i) => s + (i.totalPrice || 0), 0);
+  document.getElementById('offer-total').textContent = total.toFixed(2) + ' RON';
+}
+
+async function downloadOfferPDF() {
+  const btn = document.querySelector('[onclick="downloadOfferPDF()"]');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Generez...';
+
+  try {
+    const body = {
+      eventName: document.getElementById('offer-event-name').value,
+      clientName: document.getElementById('offer-client').value,
+      eventDate: document.getElementById('offer-date').value,
+      guestCount: document.getElementById('offer-guests').value,
+      durationHours: document.getElementById('offer-hours').value,
+      notes: document.getElementById('offer-notes').value,
+      validity: 7,
+      items: currentOfferItems
+    };
+
+    const resp = await fetch('/api/offers/pdf', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error); }
+
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Oferta-${body.eventName || 'eveniment'}-flercafe.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+  } catch (e) {
+    alert('Eroare generare PDF: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
 }
 </script>
 </body>

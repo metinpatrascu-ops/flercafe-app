@@ -1209,6 +1209,202 @@ app.get('/api/dashboard', verifyToken, async (req, res) => {
   res.json({ totalProducts: products.length, lowStock, totalStockValue, recentInvoices: invoices, recentEvents: events, upcomingEvents, recentMovements: movements });
 });
 
+// ─── AI CHAT ────────────────────────────────────────────────────────────────
+function parseEventFromText(text) {
+  const t = text;
+  const tl = t.toLowerCase();
+
+  const guestMatch = tl.match(/(\d+)\s*(?:persoan|invitat|oaspeț|guest)/i);
+  const guestCount = guestMatch ? parseInt(guestMatch[1]) : 50;
+
+  const hoursMatch = tl.match(/(\d+)\s*or[eă]/i);
+  const durationHours = hoursMatch ? parseInt(hoursMatch[1]) : 4;
+
+  const eventType = /corporate|business/i.test(tl) ? 'corporate' :
+    /lansare/i.test(tl) ? 'lansare' :
+    /nunt[aă]/i.test(tl) ? 'nunta' :
+    /botez/i.test(tl) ? 'botez' : 'petrecere';
+
+  const month = new Date().getMonth();
+  const season = (month >= 4 && month <= 8) ? 'vara' : 'iarna';
+
+  const menuItems = [];
+  const prosMatch = tl.match(/(\d+)\s*sticle?\s*(?:de\s*)?prosecco/i);
+  if (prosMatch) menuItems.push({ name: 'Prosecco', quantity: parseInt(prosMatch[1]), unit: 'sticle' });
+
+  const nameMatch = t.match(/evenimentul?\s+([A-ZĂÂÎȘȚ][^\s,\.]+(?:\s+[A-ZĂÂÎȘȚ][^\s,\.]+)?)/);
+  const eventName = nameMatch ? nameMatch[1] : 'Eveniment';
+
+  const clientMatch = t.match(/client[ă]?\s+([A-ZĂÂÎȘȚ][^\s,\.]+)/i);
+  const clientName = clientMatch ? clientMatch[1] : '';
+
+  return { eventName, clientName, guestCount, durationHours, eventType, season, menuItems };
+}
+
+app.post('/api/ai/chat', verifyToken, async (req, res) => {
+  try {
+    const { message } = req.body;
+    if (!message || !message.trim()) return res.status(400).json({ error: 'Mesaj gol' });
+
+    let eventData, analysis, reply;
+
+    if (HAS_OPENAI) {
+      const month = new Date().getMonth();
+      const defaultSeason = (month >= 4 && month <= 8) ? 'vara' : 'iarna';
+      const systemPrompt = `Ești asistentul AI al barului flērcafē din România. Analizezi brief-uri de evenimente și calculezi necesarul de băuturi. Comunici EXCLUSIV în română, prietenos și profesional.
+
+Extrage din mesajul utilizatorului:
+- Numele evenimentului sau al clientului
+- Numărul de invitați (integer)
+- Durata în ore (default 4)
+- Tipul: corporate | lansare | nunta | botez | petrecere | altele
+- Sezonul: vara | iarna (default: ${defaultSeason} bazat pe luna curentă)
+- Produse cerute explicit (ex: "20 sticle prosecco")
+
+Returnează STRICT JSON:
+{"eventName":"...","clientName":"...","guestCount":0,"durationHours":4,"eventType":"...","season":"vara","menuItems":[{"name":"...","quantity":0,"unit":"..."}],"reply":"mesaj prietenos confirmând că ai înțeles evenimentul și că urmează calculul"}`;
+
+      const resp = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: message }],
+        response_format: { type: 'json_object' },
+        max_tokens: 700,
+        temperature: 0.1
+      });
+      eventData = JSON.parse(resp.choices[0].message.content);
+      reply = eventData.reply || `Am înțeles! Calculez pentru ${eventData.guestCount} invitați...`;
+    } else {
+      eventData = parseEventFromText(message);
+      reply = `Am înțeles! Calculez necesarul pentru ${eventData.eventType === 'corporate' ? 'evenimentul corporate' : 'evenimentul'} cu ${eventData.guestCount} invitați, ${eventData.durationHours} ore. Iată recomandările:`;
+    }
+
+    analysis = ruleBasedAnalysis(eventData);
+    res.json({ reply, eventData, analysis });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// ─── PDF OFFER ───────────────────────────────────────────────────────────────
+app.post('/api/offers/pdf', verifyToken, async (req, res) => {
+  try {
+    const PDFDocument = require('pdfkit');
+    const { eventName, clientName, eventDate, guestCount, durationHours, items, notes, validity } = req.body;
+
+    const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `Ofertă ${eventName}`, Author: 'flērcafē' } });
+    const dateStr = new Date().toLocaleDateString('ro-RO');
+    const offerNo = `FC-${Date.now().toString().slice(-6)}`;
+    const totalValue = (items || []).reduce((s, i) => s + (Number(i.totalPrice) || 0), 0);
+    const MARGIN = 50;
+    const W = 495;
+    const GOLD = '#C8A96E';
+    const DARK = '#1a1a1a';
+    const GRAY = '#666666';
+
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="Oferta-${(eventName || 'eveniment').replace(/\s+/g, '-')}-flercafe.pdf"`);
+    doc.pipe(res);
+
+    // Header bar
+    doc.rect(0, 0, 595, 110).fill(DARK);
+    doc.fontSize(26).fillColor(GOLD).font('Helvetica-Bold')
+       .text('flērcafē', MARGIN, 28, { align: 'center', width: W });
+    doc.fontSize(10).fillColor('#aaaaaa').font('Helvetica')
+       .text('OFERTĂ DE SERVICII EVENIMENT', MARGIN, 62, { align: 'center', width: W });
+    doc.moveTo(MARGIN, 80).lineTo(545, 80).strokeColor(GOLD).lineWidth(0.5).stroke();
+    doc.fontSize(8).fillColor('#888888')
+       .text(`Nr. ofertă: ${offerNo}  |  Data: ${dateStr}  |  Valabilitate: ${validity || 7} zile`, MARGIN, 88, { align: 'center', width: W });
+
+    // Info box
+    doc.rect(0, 110, 595, 68).fill('#f7f4ef');
+    doc.fontSize(8).fillColor(GRAY).font('Helvetica')
+       .text('CLIENT:', MARGIN, 124).text('EVENIMENT:', 310, 124)
+       .text('NR. INVITAȚI:', MARGIN, 140).text('DATA EVENIMENT:', 310, 140)
+       .text('DURATĂ:', MARGIN, 156).text('', 310, 156);
+    doc.fontSize(9).fillColor(DARK).font('Helvetica-Bold')
+       .text(clientName || '—', MARGIN + 58, 124)
+       .text(eventName || '—', 310 + 78, 124)
+       .text(`${guestCount || '—'} persoane`, MARGIN + 80, 140)
+       .text(eventDate ? new Date(eventDate).toLocaleDateString('ro-RO') : '—', 310 + 106, 140)
+       .text(`${durationHours || 4} ore`, MARGIN + 55, 156);
+
+    // Table
+    const tY = 195;
+    const cols = [
+      { label: 'Nr.', w: 25, align: 'center' },
+      { label: 'Produs / Descriere', w: 185, align: 'left' },
+      { label: 'Cantitate', w: 65, align: 'center' },
+      { label: 'U.M.', w: 65, align: 'left' },
+      { label: 'Preț unitar', w: 75, align: 'right' },
+      { label: 'Total RON', w: 80, align: 'right' }
+    ];
+    const colX = [MARGIN];
+    cols.forEach((c, i) => colX.push(colX[i] + c.w));
+
+    // Header row
+    doc.rect(MARGIN, tY, W, 20).fill(DARK);
+    doc.fontSize(8).fillColor('#ffffff').font('Helvetica-Bold');
+    cols.forEach((c, i) => {
+      doc.text(c.label, colX[i] + 3, tY + 6, { width: c.w - 6, align: c.align });
+    });
+
+    // Data rows
+    let rowY = tY + 20;
+    (items || []).forEach((item, idx) => {
+      const rh = 20;
+      doc.rect(MARGIN, rowY, W, rh).fill(idx % 2 === 0 ? '#fdf9f3' : '#ffffff');
+      doc.fontSize(8).fillColor(DARK).font('Helvetica');
+      doc.text(`${idx + 1}`, colX[0] + 3, rowY + 6, { width: cols[0].w - 6, align: 'center' });
+      doc.text(item.name || '', colX[1] + 3, rowY + 6, { width: cols[1].w - 6 });
+      doc.text(`${item.quantity || ''}`, colX[2] + 3, rowY + 6, { width: cols[2].w - 6, align: 'center' });
+      doc.text(item.unit || '', colX[3] + 3, rowY + 6, { width: cols[3].w - 6 });
+      doc.text(`${Number(item.unitPrice || 0).toFixed(2)} RON`, colX[4] + 3, rowY + 6, { width: cols[4].w - 6, align: 'right' });
+      doc.text(`${Number(item.totalPrice || 0).toFixed(2)} RON`, colX[5] + 3, rowY + 6, { width: cols[5].w - 6, align: 'right' });
+      rowY += rh;
+    });
+
+    // Table border
+    doc.rect(MARGIN, tY, W, rowY - tY).strokeColor(GOLD).lineWidth(0.5).stroke();
+
+    // Total bar
+    rowY += 8;
+    doc.rect(350, rowY, 195, 28).fill(DARK);
+    doc.fontSize(9).fillColor('#aaaaaa').font('Helvetica')
+       .text('TOTAL OFERTĂ:', 358, rowY + 8);
+    doc.fontSize(11).fillColor(GOLD).font('Helvetica-Bold')
+       .text(`${totalValue.toFixed(2)} RON`, 358, rowY + 8, { width: 179, align: 'right' });
+
+    // Notes
+    rowY += 48;
+    if (notes && notes.trim()) {
+      doc.fontSize(8).fillColor(DARK).font('Helvetica-Bold').text('Observații:', MARGIN, rowY);
+      rowY += 14;
+      doc.fontSize(8).fillColor(GRAY).font('Helvetica').text(notes, MARGIN, rowY, { width: W });
+      rowY += 30;
+    }
+
+    // Terms box
+    rowY += 10;
+    doc.rect(MARGIN, rowY, W, 36).fill('#f7f4ef');
+    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
+       .text('Termeni și condiții:', MARGIN + 8, rowY + 6, { continued: false })
+       .text(`• Prețurile includ TVA și sunt valabile ${validity || 7} zile de la data emiterii.`, MARGIN + 8, rowY + 16)
+       .text('• Cantitățile recomandate sunt estimate pe baza standardelor HoReCa + 15% marjă de siguranță.', MARGIN + 8, rowY + 26);
+
+    // Footer
+    doc.rect(0, 780, 595, 61).fill(DARK);
+    doc.moveTo(MARGIN, 788).lineTo(545, 788).strokeColor(GOLD).lineWidth(0.5).stroke();
+    doc.fontSize(8).fillColor(GOLD).font('Helvetica-Bold')
+       .text('flērcafē', MARGIN, 796, { align: 'center', width: W });
+    doc.fontSize(7).fillColor('#888888').font('Helvetica')
+       .text('Ofertă generată automat de sistemul flērcafē  |  Toate drepturile rezervate', MARGIN, 810, { align: 'center', width: W });
+
+    doc.end();
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ─── START ──────────────────────────────────────────────────────────────────
 process.on('unhandledRejection', (err) => {
   console.error('Unhandled rejection:', err.message || err);
