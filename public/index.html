@@ -132,13 +132,13 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
     <div id="login-form">
       <div class="mb-3">
         <label class="form-label">Email</label>
-        <input type="email" id="login-email" class="form-control" placeholder="email@tau.ro">
+        <input type="email" id="login-email" class="form-control" placeholder="email@tau.ro" onkeydown="if(event.key==='Enter')document.getElementById('login-password').focus()">
       </div>
       <div class="mb-4">
         <label class="form-label">Parolă</label>
-        <input type="password" id="login-password" class="form-control" placeholder="••••••">
+        <input type="password" id="login-password" class="form-control" placeholder="••••••" onkeydown="if(event.key==='Enter')doLogin()">
       </div>
-      <button class="btn btn-primary w-100 mb-3" onclick="doLogin()">Intră în aplicație</button>
+      <button class="btn btn-primary w-100 mb-3" id="login-btn" onclick="doLogin()">Intră în aplicație</button>
       <div class="text-center" style="color:var(--fc-muted);font-size:.85rem;">
         Nu ai cont? <a href="#" onclick="showRegister()" style="color:var(--fc-primary);">Creează cont</a>
       </div>
@@ -1016,12 +1016,19 @@ let lastAiAnalysis = null;
 let lastEventData = null;
 
 // ── INIT ────────────────────────────────────────────────────────────────────
-window.onload = () => {
-  // Ping server immediately so cold start happens while user types credentials
+window.onload = async () => {
   fetch('/api/health').catch(() => {});
 
   if (TOKEN) {
-    showApp();
+    try {
+      const me = await api('GET', '/auth/me');
+      document.getElementById('sidebar-user').textContent = me.name || '';
+      showApp();
+    } catch {
+      localStorage.removeItem('fc_token');
+      TOKEN = null;
+      document.getElementById('m-date').valueAsDate = new Date();
+    }
   } else {
     document.getElementById('m-date').valueAsDate = new Date();
   }
@@ -1081,18 +1088,30 @@ function showRegister() { document.getElementById('login-form').classList.add('d
 function showLogin() { document.getElementById('register-form').classList.add('d-none'); document.getElementById('login-form').classList.remove('d-none'); }
 
 async function doLogin() {
-  const email = document.getElementById('login-email').value;
+  const email = document.getElementById('login-email').value.trim();
   const password = document.getElementById('login-password').value;
+  if (!email || !password) {
+    const el = document.getElementById('auth-error');
+    el.textContent = 'Introdu email și parolă.';
+    el.classList.remove('d-none');
+    return;
+  }
+  const btn = document.getElementById('login-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Se conectează...';
+  document.getElementById('auth-error').classList.add('d-none');
   try {
     const data = await api('POST', '/auth/login', { email, password });
     TOKEN = data.token;
     localStorage.setItem('fc_token', TOKEN);
-    document.getElementById('sidebar-user').textContent = data.user.name;
+    document.getElementById('sidebar-user').textContent = data.user?.name || '';
     showApp();
   } catch (e) {
     const el = document.getElementById('auth-error');
-    el.textContent = e.message;
+    el.textContent = e.message || 'Email sau parolă incorectă.';
     el.classList.remove('d-none');
+    btn.disabled = false;
+    btn.innerHTML = 'Intră în aplicație';
   }
 }
 
