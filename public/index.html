@@ -953,9 +953,19 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
               <tbody id="ed-consum-rows"></tbody>
             </table>
           </div>
-          <div class="mt-2 d-flex justify-content-between align-items-center">
-            <strong style="color:var(--fc-primary);">Total cost consum: <span id="ed-total-cost">0.00</span> RON</strong>
-            <button class="btn btn-primary btn-sm" onclick="saveConsum()"><i class="bi bi-floppy"></i> Salvează consumul</button>
+          <div class="mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+              <strong style="color:var(--fc-primary);">Cost achiziție: <span id="ed-total-cost">0.00</span> RON</strong>
+              <span style="color:var(--fc-muted);font-size:.82rem;margin-left:12px;">→ Ofertă 2.5×: <span id="ed-total-offer" style="color:#C8A96E;font-weight:600;">0.00 RON</span></span>
+            </div>
+            <div class="d-flex gap-2">
+              <button class="btn btn-outline-secondary btn-sm" onclick="saveConsum()" title="Salvează fără PDF">
+                <i class="bi bi-floppy"></i> Salvează
+              </button>
+              <button class="btn btn-danger btn-sm" onclick="saveAndOfferPDF()" id="btn-offer-pdf">
+                <i class="bi bi-file-earmark-pdf"></i> Generează Ofertă PDF Mercedes
+              </button>
+            </div>
           </div>
         </div>
 
@@ -1782,6 +1792,8 @@ function recalcConsumTotal() {
     total += rowTotal;
   });
   document.getElementById('ed-total-cost').textContent = total.toFixed(2);
+  const offerEl = document.getElementById('ed-total-offer');
+  if (offerEl) offerEl.textContent = (total * 2.5).toFixed(2) + ' RON';
 }
 
 async function saveConsum() {
@@ -2102,6 +2114,79 @@ function exportCalc() {
   a.download = 'oferta-flercafe.txt';
 
   a.click();
+}
+
+// ── OFFER PDF FROM EVENT ─────────────────────────────────────────────────────
+async function saveAndOfferPDF() {
+  const btn = document.getElementById('btn-offer-pdf');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Se generează...';
+
+  // 1. Collect rows
+  const stockConsumed = [];
+  document.querySelectorAll('#ed-consum-rows tr').forEach(tr => {
+    const name = tr.querySelector('.consum-name')?.value;
+    const qty = parseFloat(tr.querySelector('.consum-qty')?.value) || 0;
+    if (!name || !qty) return;
+    const price = parseFloat(tr.querySelector('.consum-price')?.value) || 0;
+    stockConsumed.push({ productName: name, quantity: qty, unit: tr.querySelector('.consum-unit')?.value || 'buc', unitPrice: price, totalCost: qty * price });
+  });
+
+  try {
+    // 2. Save consumption (server fills in prices from DB)
+    const saved = await api('PUT', '/events/' + currentEventId + '/consumption', { stockConsumed });
+    currentEventData.stockConsumed = saved.stockConsumed || stockConsumed;
+    currentEventData.totalStockCost = saved.totalStockCost;
+
+    const MARKUP = 2.5;
+    const ev = currentEventData;
+
+    // 3. Build PDF items with 2.5× sell price
+    const items = (saved.stockConsumed || stockConsumed)
+      .filter(i => i.quantity > 0)
+      .map(i => ({
+        name: i.productName,
+        quantity: i.quantity,
+        unit: i.unit,
+        unitPrice: Math.round((i.unitPrice || 0) * MARKUP * 100) / 100,
+        totalPrice: Math.round((i.totalCost || 0) * MARKUP * 100) / 100
+      }));
+
+    const totalOffer = items.reduce((s, i) => s + i.totalPrice, 0);
+
+    // 4. Generate PDF
+    const resp = await fetch('/api/offers/pdf', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        eventName: ev.name,
+        clientName: ev.client || 'Mercedes-Benz',
+        eventDate: ev.date,
+        guestCount: ev.guestCount,
+        durationHours: ev.durationHours,
+        notes: `Marjă aplicată: ${MARKUP}×. Cost achiziție: ${(saved.totalStockCost||0).toFixed(2)} RON. Ofertă: ${totalOffer.toFixed(2)} RON.`,
+        validity: 7,
+        items
+      })
+    });
+
+    if (!resp.ok) { const e = await resp.json(); throw new Error(e.error); }
+    const blob = await resp.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `Oferta-${(ev.name||'eveniment').replace(/\s+/g,'-')}-Mercedes.pdf`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    renderFinanciar(currentEventData);
+    await loadEvents();
+  } catch(e) {
+    alert('Eroare: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-file-earmark-pdf"></i> Generează Ofertă PDF Mercedes';
+  }
 }
 
 // ── ROBOT AI ─────────────────────────────────────────────────────────────────
