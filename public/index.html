@@ -725,49 +725,112 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
   </div>
 </div>
 
-<!-- EVENT SAVE MODAL -->
+<!-- EVENT MODAL (add/edit + recommendations) -->
 <div class="modal fade" id="eventModal" tabindex="-1">
-  <div class="modal-dialog">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
     <div class="modal-content">
       <div class="modal-header">
-        <h5 class="modal-title">Salvează eveniment</h5>
+        <h5 class="modal-title">Eveniment nou</h5>
         <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
       </div>
       <div class="modal-body">
         <div class="row g-3">
-          <div class="col-12">
-            <label class="form-label">Numele evenimentului *</label>
-            <input type="text" id="e-name" class="form-control" placeholder="ex: Lansare GLS — Mercedes">
+
+          <!-- COLOANA STÂNGA: detalii eveniment -->
+          <div class="col-md-5">
+            <div class="fw-semibold mb-3" style="color:var(--fc-primary);font-size:.9rem;">📋 Detalii eveniment</div>
+            <div class="mb-2">
+              <label class="form-label">Numele evenimentului *</label>
+              <input type="text" id="e-name" class="form-control" placeholder="ex: Lansare GLS — Mercedes">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Client / Organizator</label>
+              <input type="text" id="e-client" class="form-control" placeholder="ex: Mercedes-Benz Romania">
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Data evenimentului</label>
+              <input type="date" id="e-date" class="form-control">
+            </div>
+            <div class="row g-2">
+              <div class="col-6">
+                <label class="form-label">Preț ofertă (RON)</label>
+                <input type="number" id="e-offer" class="form-control" placeholder="0.00">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Status</label>
+                <select id="e-status" class="form-select">
+                  <option value="draft">Draft</option>
+                  <option value="oferta">Ofertă trimisă</option>
+                  <option value="confirmat">Confirmat</option>
+                </select>
+              </div>
+            </div>
+            <div class="mt-2">
+              <label class="form-label">Note</label>
+              <textarea id="e-notes" class="form-control" rows="2" placeholder="observații..."></textarea>
+            </div>
           </div>
+
+          <!-- SEPARATOR -->
+          <div class="col-md-1 d-none d-md-flex align-items-stretch justify-content-center">
+            <div style="width:1px;background:var(--fc-border);margin:0 auto;"></div>
+          </div>
+
+          <!-- COLOANA DREAPTA: calculator necesar -->
           <div class="col-md-6">
-            <label class="form-label">Client</label>
-            <input type="text" id="e-client" class="form-control" placeholder="ex: Mercedes-Benz Romania">
+            <div class="fw-semibold mb-3" style="color:var(--fc-primary);font-size:.9rem;">🧮 Calculator necesar</div>
+            <div class="row g-2 mb-2">
+              <div class="col-6">
+                <label class="form-label">Nr. invitați *</label>
+                <input type="number" id="em-guests" class="form-control" placeholder="150" min="1">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Durată (ore)</label>
+                <input type="number" id="em-hours" class="form-control" value="4" min="1" max="24">
+              </div>
+              <div class="col-6">
+                <label class="form-label">Tip eveniment</label>
+                <select id="em-type" class="form-select">
+                  <option value="corporate">Corporate</option>
+                  <option value="lansare">Lansare produs</option>
+                  <option value="party">Party</option>
+                  <option value="nunta">Nuntă</option>
+                  <option value="altele">Altele</option>
+                </select>
+              </div>
+              <div class="col-6">
+                <label class="form-label">Sezon</label>
+                <select id="em-season" class="form-select">
+                  <option value="vara">Vară</option>
+                  <option value="toamna">Toamnă</option>
+                  <option value="iarna">Iarnă</option>
+                  <option value="primavara">Primăvară</option>
+                </select>
+              </div>
+            </div>
+            <div class="mb-2">
+              <label class="form-label">Ce vrea clientul (meniu, cerințe)</label>
+              <textarea id="em-brief" class="form-control" rows="3" placeholder="ex: 4 cocktailuri signature, apă plată și minerală, cola, socată, 20 sticle Prosecco welcome..."></textarea>
+            </div>
+            <button class="btn btn-primary w-100" id="em-calc-btn" onclick="calcEventModal()">
+              <i class="bi bi-magic"></i> Calculează necesar
+            </button>
+
+            <!-- Rezultat recomandări -->
+            <div id="em-result" class="mt-3 d-none">
+              <div id="em-warnings" class="mb-2"></div>
+              <div id="em-recs"></div>
+              <div class="mt-2 p-2 rounded" style="background:rgba(200,169,110,.08);border:1px solid rgba(200,169,110,.2);font-size:.82rem;color:var(--fc-muted);">
+                <i class="bi bi-info-circle"></i> Recomandările se salvează odată cu evenimentul.
+              </div>
+            </div>
           </div>
-          <div class="col-md-6">
-            <label class="form-label">Data evenimentului</label>
-            <input type="date" id="e-date" class="form-control">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Preț ofertă (RON)</label>
-            <input type="number" id="e-offer" class="form-control" placeholder="0.00">
-          </div>
-          <div class="col-md-6">
-            <label class="form-label">Status</label>
-            <select id="e-status" class="form-select">
-              <option value="draft">Draft</option>
-              <option value="oferta">Ofertă trimisă</option>
-              <option value="confirmat">Confirmat</option>
-            </select>
-          </div>
-          <div class="col-12">
-            <label class="form-label">Note</label>
-            <textarea id="e-notes" class="form-control" rows="2"></textarea>
-          </div>
+
         </div>
       </div>
       <div class="modal-footer">
         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">Renunță</button>
-        <button type="button" class="btn btn-primary" onclick="saveEvent()">Salvează</button>
+        <button type="button" class="btn btn-primary" onclick="saveEvent()"><i class="bi bi-floppy"></i> Salvează evenimentul</button>
       </div>
     </div>
   </div>
@@ -1377,19 +1440,76 @@ function renderEventAnalysis(a) {
 }
 
 function openEventModal() {
+  ['e-name','e-client','e-offer','e-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('e-date').value = '';
-  document.getElementById('e-name').value = '';
-  document.getElementById('e-client').value = '';
-  document.getElementById('e-offer').value = '';
-  document.getElementById('e-notes').value = '';
+  document.getElementById('e-status').value = 'draft';
+  document.getElementById('em-guests').value = '';
+  document.getElementById('em-hours').value = '4';
+  document.getElementById('em-brief').value = '';
+  document.getElementById('em-result').classList.add('d-none');
+  lastAiAnalysis = null; lastEventData = null;
   new bootstrap.Modal(document.getElementById('eventModal')).show();
 }
 
 function saveEventFromAnalysis() {
-  if (lastEventData) {
-    document.getElementById('e-name').value = document.getElementById('ev-brief').value.substring(0, 50);
-  }
+  document.getElementById('e-name').value = document.getElementById('ev-brief').value.substring(0, 60);
+  document.getElementById('em-guests').value = document.getElementById('ev-guests').value;
+  document.getElementById('em-hours').value = document.getElementById('ev-hours').value;
+  document.getElementById('em-type').value = document.getElementById('ev-type').value;
+  document.getElementById('em-season').value = document.getElementById('ev-season').value;
+  document.getElementById('em-brief').value = document.getElementById('ev-brief').value;
+  // show existing analysis result
+  if (lastAiAnalysis) renderEventModalRecs(lastAiAnalysis);
   new bootstrap.Modal(document.getElementById('eventModal')).show();
+}
+
+async function calcEventModal() {
+  const guests = parseInt(document.getElementById('em-guests').value);
+  if (!guests || guests < 1) { alert('Introdu numărul de invitați!'); return; }
+  const btn = document.getElementById('em-calc-btn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-fc"></span> Calculează...';
+  try {
+    const body = {
+      guestCount: guests,
+      durationHours: parseInt(document.getElementById('em-hours').value) || 4,
+      eventType: document.getElementById('em-type').value,
+      season: document.getElementById('em-season').value,
+      briefText: document.getElementById('em-brief').value,
+      menuItems: []
+    };
+    const data = await api('POST', '/events/analyze', body);
+    lastAiAnalysis = data.analysis;
+    lastEventData = body;
+    renderEventModalRecs(data.analysis);
+  } catch(e) { alert('Eroare: ' + e.message); }
+  finally {
+    btn.disabled = false;
+    btn.innerHTML = '<i class="bi bi-magic"></i> Calculează necesar';
+  }
+}
+
+function renderEventModalRecs(a) {
+  if (!a) return;
+  const warnEl = document.getElementById('em-warnings');
+  warnEl.innerHTML = (a.warnings||[]).map(w =>
+    `<div class="ai-warning mb-1"><i class="bi bi-exclamation-triangle"></i> ${w}</div>`).join('');
+
+  const recsEl = document.getElementById('em-recs');
+  recsEl.innerHTML = (a.recommendations||[]).map(r => `
+    <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--fc-border);">
+      <div>
+        <span class="fw-semibold" style="font-size:.88rem;">${r.productName}</span>
+        ${r.warningMessage ? `<div class="text-warning" style="font-size:.76rem;"><i class="bi bi-exclamation-triangle"></i> ${r.warningMessage}</div>` : ''}
+        <div style="color:var(--fc-muted);font-size:.75rem;">${r.reason||''}</div>
+      </div>
+      <div class="text-end ms-3" style="white-space:nowrap;">
+        <span style="font-size:1.15rem;font-weight:700;color:var(--fc-primary);">${r.recommendedQuantity}</span>
+        <div style="color:var(--fc-muted);font-size:.75rem;">${r.recommendedUnit}</div>
+      </div>
+    </div>`).join('');
+
+  document.getElementById('em-result').classList.remove('d-none');
 }
 
 async function saveEvent() {
@@ -1403,11 +1523,11 @@ async function saveEvent() {
     offeredPrice: parseFloat(document.getElementById('e-offer').value) || 0,
     status: document.getElementById('e-status').value,
     notes: document.getElementById('e-notes').value,
-    guestCount: lastEventData?.guestCount || 0,
-    durationHours: lastEventData?.durationHours || 4,
-    eventType: lastEventData?.eventType || 'altele',
-    season: lastEventData?.season || 'vara',
-    briefText: lastEventData?.briefText || '',
+    guestCount: parseInt(document.getElementById('em-guests').value) || lastEventData?.guestCount || 0,
+    durationHours: parseInt(document.getElementById('em-hours').value) || lastEventData?.durationHours || 4,
+    eventType: document.getElementById('em-type').value || lastEventData?.eventType || 'altele',
+    season: document.getElementById('em-season').value || lastEventData?.season || 'vara',
+    briefText: document.getElementById('em-brief').value || lastEventData?.briefText || '',
     menuItems: lastEventData?.menuItems || [],
     aiAnalysis: lastAiAnalysis ? JSON.stringify(lastAiAnalysis) : '',
     recommendations: lastAiAnalysis?.recommendations || []
