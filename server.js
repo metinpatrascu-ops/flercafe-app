@@ -110,7 +110,15 @@ const EventSchema = new mongoose.Schema({
   offeredPrice: { type: Number, default: 0 },
   margin: { type: Number, default: 0 },
   status: { type: String, enum: ['draft', 'oferta', 'confirmat', 'finalizat'], default: 'draft' },
-  notes: String
+  notes: String,
+  stockConsumed: [{
+    productName: String,
+    quantity: Number,
+    unit: String,
+    unitPrice: Number,
+    totalCost: Number
+  }],
+  totalStockCost: { type: Number, default: 0 }
 }, { timestamps: true });
 const Event = mongoose.model('Event', EventSchema);
 
@@ -426,6 +434,90 @@ app.post('/api/events', verifyToken, async (req, res) => {
 app.put('/api/events/:id', verifyToken, async (req, res) => {
   const event = await Event.findByIdAndUpdate(req.params.id, req.body, { new: true });
   res.json(event);
+});
+
+app.get('/api/events/:id', verifyToken, async (req, res) => {
+  const event = await Event.findById(req.params.id);
+  if (!event) return res.status(404).json({ error: 'Eveniment negăsit' });
+  res.json(event);
+});
+
+// Salvează consumul efectiv al unui eveniment + creează mișcări de stoc
+app.put('/api/events/:id/consumption', verifyToken, async (req, res) => {
+  try {
+    const { stockConsumed } = req.body;
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Eveniment negăsit' });
+
+    const totalStockCost = stockConsumed.reduce((s, i) => s + (i.totalCost || 0), 0);
+
+    // Șterge mișcările vechi legate de acest eveniment
+    await StockMovement.deleteMany({ referenceId: req.params.id, reason: 'eveniment' });
+
+    // Creează mișcări noi de stoc pentru fiecare produs consumat
+    for (const item of stockConsumed) {
+      if (!item.productName || !item.quantity) continue;
+      const product = await Product.findOne({ name: { $regex: new RegExp(item.productName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i') }, active: true });
+      if (product) {
+        await StockMovement.create({
+          productId: product._id,
+          productName: product.name,
+          type: 'out',
+          quantity: item.quantity,
+          reason: 'eveniment',
+          referenceId: req.params.id,
+          referenceName: event.name,
+          date: event.date || new Date()
+        });
+      }
+    }
+
+    await Event.findByIdAndUpdate(req.params.id, {
+      stockConsumed,
+      totalStockCost,
+      status: 'finalizat'
+    });
+
+    res.json({ ok: true, totalStockCost });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Snapshot stoc la data evenimentului (calculat din mișcări)
+app.get('/api/events/:id/stock-snapshot', verifyToken, async (req, res) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) return res.status(404).json({ error: 'Eveniment negăsit' });
+
+    const eventDate = event.date ? new Date(event.date) : new Date();
+    const products = await Product.find({ active: true });
+
+    // Calculează stocul la data evenimentului pe baza mișcărilor
+    const snapshot = await Promise.all(products.map(async (p) => {
+      const movsBefore = await StockMovement.find({
+        productId: p._id,
+        date: { $lte: eventDate }
+      });
+      const stockAtDate = movsBefore.reduce((sum, m) => {
+        return sum + (m.type === 'in' ? m.quantity : -m.quantity);
+      }, 0);
+
+      return {
+        productId: p._id,
+        productName: p.name,
+        category: p.category,
+        unit: p.unit,
+        purchasePrice: p.purchasePrice,
+        stockAtEvent: stockAtDate > 0 ? stockAtDate : p.stockQuantity,
+        currentStock: p.stockQuantity
+      };
+    }));
+
+    res.json(snapshot.filter(s => s.stockAtEvent > 0));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // Calculator HoReCa bazat pe reguli — funcționează fără OpenAI
@@ -793,10 +885,77 @@ app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), asy
       return { created, updated, skipped, errors };
     };
 
+    // ── detectare sheet consum per eveniment ────────────────────────────
+    const isConsumSheet = (ws) => {
+      let score = 0;
+      ws.eachRow((row, rn) => {
+        if (rn > 4) return;
+        row.eachCell(cell => {
+          const v = (cell.value || '').toString().toLowerCase();
+          if (v.includes('consum') || v.includes('folosit') || v.includes('utilizat')) score += 3;
+          if (v.includes('eveniment') || v.includes('event')) score++;
+          if (v.includes('produs') || v.includes('cantitat')) score++;
+        });
+      });
+      return score >= 3;
+    };
+
+    // ── import consum per eveniment ──────────────────────────────────────
+    const importConsum = async (ws) => {
+      // Detectează coloanele: Eveniment | Produs | Cantitate | Unitate | Preț/buc
+      let headerRow = 1;
+      let colMap = { eventName: 1, product: 2, qty: 3, unit: 4, price: 5 };
+
+      ws.eachRow((row, rowNum) => {
+        if (rowNum > 5) return;
+        row.eachCell((cell, colNum) => {
+          const v = (cell.value || '').toString().toLowerCase().trim();
+          if (v.includes('eveniment') || v === 'event') { headerRow = rowNum; colMap.eventName = colNum; }
+          if (v.includes('produs') || v === 'product' || v === 'item') colMap.product = colNum;
+          if (v.includes('cantit') || v === 'qty' || v === 'quantity') colMap.qty = colNum;
+          if (v === 'unitate' || v === 'unit' || v === 'um') colMap.unit = colNum;
+          if (v.includes('preț') || v.includes('pret') || v.includes('price')) colMap.price = colNum;
+        });
+      });
+
+      // Grupează rândurile pe eveniment
+      const byEvent = {};
+      for (let r = headerRow + 1; r <= ws.rowCount; r++) {
+        const row = ws.getRow(r);
+        let evName = getCellVal(row, colMap.eventName);
+        const product = getCellVal(row, colMap.product);
+        if (!product) continue;
+        if (!evName) evName = lastEvName || 'Necunoscut';
+        else lastEvName = evName;
+
+        if (!byEvent[evName]) byEvent[evName] = [];
+        byEvent[evName].push({
+          productName: product,
+          quantity: getCellNum(row, colMap.qty),
+          unit: getCellVal(row, colMap.unit) || 'buc',
+          unitPrice: getCellNum(row, colMap.price),
+          totalCost: getCellNum(row, colMap.qty) * getCellNum(row, colMap.price)
+        });
+      }
+
+      let updated = 0;
+      for (const [evName, consumed] of Object.entries(byEvent)) {
+        const event = await Event.findOne({ name: { $regex: new RegExp(evName.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'), 'i') } });
+        if (!event) continue;
+        const totalStockCost = consumed.reduce((s, i) => s + i.totalCost, 0);
+        await Event.findByIdAndUpdate(event._id, { stockConsumed: consumed, totalStockCost, status: 'finalizat' });
+        updated++;
+      }
+      return { updated, created: 0, skipped: 0, errors: [] };
+    };
+
+    let lastEvName = '';
+
     // ── procesează toate sheet-urile ─────────────────────────────────────
     const results = {
       produse: { created: 0, updated: 0, skipped: 0 },
       evenimente: { created: 0, updated: 0, skipped: 0 },
+      consum: { updated: 0 },
       errors: []
     };
 
@@ -804,8 +963,13 @@ app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), asy
       const sheetName = ws.name.toLowerCase();
       const looksLikeInv = isInventarSheet(ws);
       const looksLikeEv = isEvenimenteSheet(ws);
+      const looksLikeConsum = isConsumSheet(ws);
 
-      if (sheetName.includes('eveniment') || sheetName.includes('event') || sheetName.includes('calendar') || (looksLikeEv && !looksLikeInv)) {
+      if (looksLikeConsum || sheetName.includes('consum') || sheetName.includes('folosit')) {
+        const r = await importConsum(ws);
+        results.consum.updated += r.updated;
+        results.errors.push(...r.errors);
+      } else if (sheetName.includes('eveniment') || sheetName.includes('event') || sheetName.includes('calendar') || (looksLikeEv && !looksLikeInv)) {
         const r = await importEvenimente(ws);
         results.evenimente.created += r.created;
         results.evenimente.updated += r.updated;
@@ -831,6 +995,8 @@ app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), asy
       parts.push(`📦 Produse: ${results.produse.created} noi, ${results.produse.updated} actualizate`);
     if (results.evenimente.created || results.evenimente.updated)
       parts.push(`📅 Evenimente: ${results.evenimente.created} noi, ${results.evenimente.updated} actualizate`);
+    if (results.consum.updated)
+      parts.push(`🍹 Consum: ${results.consum.updated} evenimente actualizate cu date de consum`);
     if (!parts.length) parts.push('Nu am detectat date de importat. Verifică formatul fișierului.');
 
     res.json({ ok: true, message: parts.join(' · '), results });

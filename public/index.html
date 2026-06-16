@@ -773,6 +773,90 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
   </div>
 </div>
 
+<!-- EVENT DETAIL MODAL -->
+<div class="modal fade" id="eventDetailModal" tabindex="-1">
+  <div class="modal-dialog modal-xl modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <div>
+          <h5 class="modal-title mb-0" id="ed-title">—</h5>
+          <div id="ed-meta" style="color:var(--fc-muted);font-size:.82rem;margin-top:3px;"></div>
+        </div>
+        <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body p-0">
+        <!-- Tabs -->
+        <ul class="nav nav-tabs px-3 pt-2" style="border-color:var(--fc-border);">
+          <li class="nav-item"><button class="nav-link active" onclick="switchEdTab('consum',this)" style="color:var(--fc-muted);">🍹 Consum</button></li>
+          <li class="nav-item"><button class="nav-link" onclick="switchEdTab('stoc',this)" style="color:var(--fc-muted);">📦 Stoc la data ev.</button></li>
+          <li class="nav-item"><button class="nav-link" onclick="switchEdTab('financiar',this)" style="color:var(--fc-muted);">💰 Financiar</button></li>
+        </ul>
+
+        <!-- TAB: CONSUM -->
+        <div id="ed-tab-consum" class="p-3">
+          <div class="d-flex justify-content-between align-items-center mb-3">
+            <small style="color:var(--fc-muted);">Ce s-a consumat efectiv la acest eveniment</small>
+            <button class="btn btn-outline-secondary btn-sm" onclick="addConsumRow()"><i class="bi bi-plus"></i> Adaugă produs</button>
+          </div>
+          <div class="table-responsive">
+            <table class="table table-sm">
+              <thead><tr><th>Produs</th><th>Cantitate</th><th>Unitate</th><th>Preț/buc (RON)</th><th>Total</th><th></th></tr></thead>
+              <tbody id="ed-consum-rows"></tbody>
+            </table>
+          </div>
+          <div class="mt-2 d-flex justify-content-between align-items-center">
+            <strong style="color:var(--fc-primary);">Total cost consum: <span id="ed-total-cost">0.00</span> RON</strong>
+            <button class="btn btn-primary btn-sm" onclick="saveConsum()"><i class="bi bi-floppy"></i> Salvează consumul</button>
+          </div>
+        </div>
+
+        <!-- TAB: STOC LA DATA EVENIMENTULUI -->
+        <div id="ed-tab-stoc" class="p-3 d-none">
+          <small style="color:var(--fc-muted);" class="d-block mb-3">Stocul disponibil la data evenimentului (calculat din mișcări)</small>
+          <div id="ed-stock-snapshot">
+            <div class="text-center py-4" style="color:var(--fc-muted);"><span class="spinner-fc"></span> Se calculează...</div>
+          </div>
+        </div>
+
+        <!-- TAB: FINANCIAR -->
+        <div id="ed-tab-financiar" class="p-3 d-none">
+          <div class="row g-3">
+            <div class="col-md-4">
+              <div class="stat-card text-center">
+                <div class="stat-value text-danger" id="ed-fin-cost">—</div>
+                <div class="stat-label">Cost stoc consumat</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-card text-center">
+                <div class="stat-value" id="ed-fin-price">—</div>
+                <div class="stat-label">Preț ofertă client</div>
+              </div>
+            </div>
+            <div class="col-md-4">
+              <div class="stat-card text-center">
+                <div class="stat-value" style="color:#64c864;" id="ed-fin-profit">—</div>
+                <div class="stat-label">Profit estimat</div>
+              </div>
+            </div>
+            <div class="col-12">
+              <div class="fc-card">
+                <h6 class="mb-3">Detaliu consum</h6>
+                <div class="table-responsive">
+                  <table class="table table-sm">
+                    <thead><tr><th>Produs</th><th>Cant.</th><th>Preț/buc</th><th>Total</th></tr></thead>
+                    <tbody id="ed-fin-rows"></tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 <script>
 // ── STATE ───────────────────────────────────────────────────────────────────
@@ -1346,7 +1430,7 @@ async function loadEvents() {
     tbody.innerHTML = events.length === 0
       ? '<tr><td colspan="7" class="text-center py-3" style="color:var(--fc-muted);">Niciun eveniment salvat</td></tr>'
       : events.map(e => `
-        <tr>
+        <tr style="cursor:pointer;" onclick="openEventDetail('${e._id}')" title="Click pentru detalii consum">
           <td class="fw-semibold">${e.name}</td>
           <td style="color:var(--fc-muted);">${e.client || '—'}</td>
           <td style="color:var(--fc-muted);">${e.date ? new Date(e.date).toLocaleDateString('ro-RO') : '—'}</td>
@@ -1354,7 +1438,7 @@ async function loadEvents() {
           <td><span class="badge bg-${statusColors[e.status] || 'secondary'}">${e.status}</span></td>
           <td>${e.offeredPrice ? e.offeredPrice.toFixed(0) + ' RON' : '—'}</td>
           <td>
-            <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="deleteEvent('${e._id}')"><i class="bi bi-trash"></i></button>
+            <button class="btn btn-outline-danger btn-sm py-0 px-2" onclick="event.stopPropagation(); deleteEvent('${e._id}')"><i class="bi bi-trash"></i></button>
           </td>
         </tr>`).join('');
   } catch (e) { console.error(e); }
@@ -1364,6 +1448,151 @@ async function deleteEvent(id) {
   if (!confirm('Ștergi evenimentul?')) return;
   await api('DELETE', '/events/' + id);
   await loadEvents();
+}
+
+// ── EVENT DETAIL ──────────────────────────────────────────────────────────────
+let currentEventId = null;
+let currentEventData = null;
+
+async function openEventDetail(id) {
+  currentEventId = id;
+  try {
+    const ev = await api('GET', '/events/' + id);
+    currentEventData = ev;
+
+    document.getElementById('ed-title').textContent = ev.name;
+    const meta = [
+      ev.client ? `👤 ${ev.client}` : '',
+      ev.date ? `📅 ${new Date(ev.date).toLocaleDateString('ro-RO')}` : '',
+      ev.guestCount ? `👥 ${ev.guestCount} invitați` : '',
+      ev.eventType ? ev.eventType : ''
+    ].filter(Boolean).join('  ·  ');
+    document.getElementById('ed-meta').textContent = meta;
+
+    // Reset tabs
+    switchEdTab('consum', document.querySelector('#eventDetailModal .nav-link'));
+
+    // Populează tabelul de consum
+    renderConsumRows(ev.stockConsumed || []);
+
+    // Financiar
+    renderFinanciar(ev);
+
+    new bootstrap.Modal(document.getElementById('eventDetailModal')).show();
+  } catch(e) { alert('Eroare: ' + e.message); }
+}
+
+function switchEdTab(tab, btn) {
+  ['consum','stoc','financiar'].forEach(t => {
+    document.getElementById('ed-tab-' + t).classList.toggle('d-none', t !== tab);
+  });
+  document.querySelectorAll('#eventDetailModal .nav-link').forEach(b => b.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+
+  if (tab === 'stoc') loadStockSnapshot();
+  if (tab === 'financiar') renderFinanciar(currentEventData);
+}
+
+function renderConsumRows(items) {
+  const tbody = document.getElementById('ed-consum-rows');
+  tbody.innerHTML = '';
+  (items.length ? items : [{}]).forEach(item => addConsumRow(item));
+  recalcConsumTotal();
+}
+
+function addConsumRow(item = {}) {
+  const tr = document.createElement('tr');
+  tr.innerHTML = `
+    <td><input type="text" class="form-control form-control-sm consum-name" value="${item.productName||''}" placeholder="Produs" oninput="recalcConsumTotal()"></td>
+    <td><input type="number" class="form-control form-control-sm consum-qty" value="${item.quantity||''}" placeholder="0" min="0" step="0.1" oninput="recalcConsumTotal()" style="width:70px;"></td>
+    <td><input type="text" class="form-control form-control-sm consum-unit" value="${item.unit||'buc'}" placeholder="buc" style="width:60px;"></td>
+    <td><input type="number" class="form-control form-control-sm consum-price" value="${item.unitPrice||''}" placeholder="0.00" min="0" step="0.01" oninput="recalcConsumTotal()" style="width:90px;"></td>
+    <td class="consum-total fw-semibold" style="color:var(--fc-primary);">${item.totalCost ? item.totalCost.toFixed(2)+' RON' : '—'}</td>
+    <td><button class="btn btn-outline-danger btn-sm py-0 px-1" onclick="this.closest('tr').remove(); recalcConsumTotal()"><i class="bi bi-x"></i></button></td>
+  `;
+  document.getElementById('ed-consum-rows').appendChild(tr);
+}
+
+function recalcConsumTotal() {
+  let total = 0;
+  document.querySelectorAll('#ed-consum-rows tr').forEach(tr => {
+    const qty = parseFloat(tr.querySelector('.consum-qty')?.value) || 0;
+    const price = parseFloat(tr.querySelector('.consum-price')?.value) || 0;
+    const rowTotal = qty * price;
+    const td = tr.querySelector('.consum-total');
+    if (td) td.textContent = rowTotal > 0 ? rowTotal.toFixed(2) + ' RON' : '—';
+    total += rowTotal;
+  });
+  document.getElementById('ed-total-cost').textContent = total.toFixed(2);
+}
+
+async function saveConsum() {
+  const stockConsumed = [];
+  document.querySelectorAll('#ed-consum-rows tr').forEach(tr => {
+    const name = tr.querySelector('.consum-name')?.value.trim();
+    const qty = parseFloat(tr.querySelector('.consum-qty')?.value) || 0;
+    if (!name || !qty) return;
+    const price = parseFloat(tr.querySelector('.consum-price')?.value) || 0;
+    stockConsumed.push({
+      productName: name,
+      quantity: qty,
+      unit: tr.querySelector('.consum-unit')?.value || 'buc',
+      unitPrice: price,
+      totalCost: qty * price
+    });
+  });
+
+  try {
+    const result = await api('PUT', '/events/' + currentEventId + '/consumption', { stockConsumed });
+    currentEventData.stockConsumed = stockConsumed;
+    currentEventData.totalStockCost = result.totalStockCost;
+    renderFinanciar(currentEventData);
+
+    const toast = document.createElement('div');
+    toast.style.cssText = 'position:fixed;bottom:24px;right:24px;background:#242424;border:1px solid #64c864;color:#e0e0e0;padding:14px 20px;border-radius:12px;z-index:9999;';
+    toast.innerHTML = '✅ Consumul a fost salvat și stocul actualizat!';
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 3500);
+    await loadEvents();
+  } catch(e) { alert('Eroare: ' + e.message); }
+}
+
+async function loadStockSnapshot() {
+  const el = document.getElementById('ed-stock-snapshot');
+  el.innerHTML = '<div class="text-center py-3" style="color:var(--fc-muted);"><span class="spinner-fc"></span> Se calculează...</div>';
+  try {
+    const snap = await api('GET', '/events/' + currentEventId + '/stock-snapshot');
+    if (!snap.length) { el.innerHTML = '<div style="color:var(--fc-muted);">Nu există date de stoc pentru această dată.</div>'; return; }
+    el.innerHTML = `<div class="table-responsive"><table class="table table-sm">
+      <thead><tr><th>Produs</th><th>Categorie</th><th>Stoc la ev.</th><th>Unitate</th><th>Stoc actual</th></tr></thead>
+      <tbody>${snap.map(s => `
+        <tr>
+          <td>${s.productName}</td>
+          <td><span class="category-badge cat-${s.category}">${s.category}</span></td>
+          <td class="fw-semibold ${s.stockAtEvent < 5 ? 'stock-low' : 'stock-ok'}">${s.stockAtEvent}</td>
+          <td style="color:var(--fc-muted);">${s.unit}</td>
+          <td style="color:var(--fc-muted);">${s.currentStock} ${s.unit}</td>
+        </tr>`).join('')}
+      </tbody>
+    </table></div>`;
+  } catch(e) {
+    el.innerHTML = `<div style="color:var(--fc-muted);">Eroare: ${e.message}</div>`;
+  }
+}
+
+function renderFinanciar(ev) {
+  const cost = ev.totalStockCost || 0;
+  const price = ev.offeredPrice || 0;
+  const profit = price - cost;
+  document.getElementById('ed-fin-cost').textContent = cost.toFixed(2) + ' RON';
+  document.getElementById('ed-fin-price').textContent = price > 0 ? price.toFixed(2) + ' RON' : '—';
+  document.getElementById('ed-fin-profit').textContent = price > 0 ? profit.toFixed(2) + ' RON' : '—';
+  document.getElementById('ed-fin-profit').style.color = profit >= 0 ? '#64c864' : '#ff6464';
+
+  const rows = (ev.stockConsumed || []).map(i =>
+    `<tr><td>${i.productName}</td><td>${i.quantity} ${i.unit}</td><td>${i.unitPrice?.toFixed(2)||'—'} RON</td><td class="fw-semibold">${i.totalCost?.toFixed(2)||'—'} RON</td></tr>`
+  ).join('');
+  document.getElementById('ed-fin-rows').innerHTML = rows || '<tr><td colspan="4" style="color:var(--fc-muted);">Niciun consum înregistrat</td></tr>';
 }
 
 // ── RECIPES ───────────────────────────────────────────────────────────────────
