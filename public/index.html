@@ -862,54 +862,40 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
             <div style="width:1px;background:var(--fc-border);margin:0 auto;"></div>
           </div>
 
-          <!-- COLOANA DREAPTA: calculator necesar -->
+          <!-- COLOANA DREAPTA: produse planificate -->
           <div class="col-md-6">
-            <div class="fw-semibold mb-3" style="color:var(--fc-primary);font-size:.9rem;">🧮 Calculator necesar</div>
-            <div class="row g-2 mb-2">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+              <div class="fw-semibold" style="color:var(--fc-primary);font-size:.9rem;">📋 Produse planificate</div>
+            </div>
+            <div class="row g-2 mb-3">
               <div class="col-6">
-                <label class="form-label">Nr. invitați *</label>
-                <input type="number" id="em-guests" class="form-control" placeholder="150" min="1">
-              </div>
-              <div class="col-6">
-                <label class="form-label">Durată (ore)</label>
-                <input type="number" id="em-hours" class="form-control" value="4" min="1" max="24">
+                <label class="form-label">Nr. invitați</label>
+                <input type="number" id="em-guests" class="form-control" placeholder="50" min="1">
               </div>
               <div class="col-6">
                 <label class="form-label">Tip eveniment</label>
                 <select id="em-type" class="form-select">
+                  <option value="altele">Altele</option>
                   <option value="corporate">Corporate</option>
                   <option value="lansare">Lansare produs</option>
                   <option value="party">Party</option>
                   <option value="nunta">Nuntă</option>
-                  <option value="altele">Altele</option>
-                </select>
-              </div>
-              <div class="col-6">
-                <label class="form-label">Sezon</label>
-                <select id="em-season" class="form-select">
-                  <option value="vara">Vară</option>
-                  <option value="toamna">Toamnă</option>
-                  <option value="iarna">Iarnă</option>
-                  <option value="primavara">Primăvară</option>
                 </select>
               </div>
             </div>
-            <div class="mb-2">
-              <label class="form-label">Ce vrea clientul (meniu, cerințe)</label>
-              <textarea id="em-brief" class="form-control" rows="3" placeholder="ex: 4 cocktailuri signature, apă plată și minerală, cola, socată, 20 sticle Prosecco welcome..."></textarea>
+
+            <!-- Rânduri produse -->
+            <div id="em-product-rows" style="max-height:320px;overflow-y:auto;">
+              <!-- populate dinamic -->
             </div>
-            <button class="btn btn-primary w-100" id="em-calc-btn" onclick="calcEventModal()">
-              <i class="bi bi-magic"></i> Calculează necesar
+            <button class="btn btn-outline-secondary btn-sm w-100 mt-2" onclick="addEventProductRow()">
+              <i class="bi bi-plus"></i> Adaugă produs
             </button>
 
-            <!-- Rezultat recomandări -->
-            <div id="em-result" class="mt-3 d-none">
-              <div id="em-warnings" class="mb-2"></div>
-              <div id="em-recs"></div>
-              <div class="mt-2 p-2 rounded" style="background:rgba(200,169,110,.08);border:1px solid rgba(200,169,110,.2);font-size:.82rem;color:var(--fc-muted);">
-                <i class="bi bi-info-circle"></i> Recomandările se salvează odată cu evenimentul.
-              </div>
-            </div>
+            <!-- câmpuri ascunse păstrate pentru compatibilitate -->
+            <input type="hidden" id="em-hours" value="4">
+            <input type="hidden" id="em-season" value="vara">
+            <input type="hidden" id="em-brief" value="">
           </div>
 
         </div>
@@ -1557,82 +1543,78 @@ function renderEventAnalysis(a) {
   resultEl.scrollIntoView({ behavior: 'smooth' });
 }
 
+function addEventProductRow(productId, quantity) {
+  const container = document.getElementById('em-product-rows');
+  const idx = container.children.length;
+  const opts = allProducts.map(p =>
+    `<option value="${p._id}" data-unit="${p.unit||''}" ${p._id===productId?'selected':''}>${p.name}</option>`
+  ).join('');
+  const div = document.createElement('div');
+  div.className = 'row g-1 mb-1 align-items-center em-prod-row';
+  div.innerHTML = `
+    <div class="col-7">
+      <select class="form-select form-select-sm em-prod-select" onchange="onEmProdChange(this)">
+        <option value="">— selectează produs —</option>
+        ${opts}
+      </select>
+    </div>
+    <div class="col-3">
+      <input type="number" class="form-control form-control-sm em-prod-qty" placeholder="cant." min="0" step="0.1" value="${quantity||''}">
+    </div>
+    <div class="col-1 em-prod-unit" style="font-size:.75rem;color:var(--fc-muted);"></div>
+    <div class="col-1 text-end">
+      <button class="btn btn-sm p-0" style="color:var(--fc-muted);" onclick="this.closest('.em-prod-row').remove()">×</button>
+    </div>`;
+  container.appendChild(div);
+  // trigger unit update if pre-selected
+  if (productId) {
+    const sel = div.querySelector('.em-prod-select');
+    onEmProdChange(sel);
+  }
+}
+
+function onEmProdChange(sel) {
+  const opt = sel.selectedOptions[0];
+  const unit = opt?.dataset?.unit || '';
+  sel.closest('.em-prod-row').querySelector('.em-prod-unit').textContent = unit;
+}
+
 function openEventModal() {
   ['e-name','e-client','e-offer','e-notes'].forEach(id => document.getElementById(id).value = '');
   document.getElementById('e-date').value = '';
   document.getElementById('e-status').value = 'draft';
   document.getElementById('em-guests').value = '';
-  document.getElementById('em-hours').value = '4';
-  document.getElementById('em-brief').value = '';
-  document.getElementById('em-result').classList.add('d-none');
+  document.getElementById('em-product-rows').innerHTML = '';
   lastAiAnalysis = null; lastEventData = null;
   new bootstrap.Modal(document.getElementById('eventModal')).show();
 }
 
 function saveEventFromAnalysis() {
-  document.getElementById('e-name').value = document.getElementById('ev-brief').value.substring(0, 60);
-  document.getElementById('em-guests').value = document.getElementById('ev-guests').value;
-  document.getElementById('em-hours').value = document.getElementById('ev-hours').value;
-  document.getElementById('em-type').value = document.getElementById('ev-type').value;
-  document.getElementById('em-season').value = document.getElementById('ev-season').value;
-  document.getElementById('em-brief').value = document.getElementById('ev-brief').value;
-  // show existing analysis result
-  if (lastAiAnalysis) renderEventModalRecs(lastAiAnalysis);
+  // Deschide modalul de eveniment nou cu datele din pagina AI
+  ['e-name','e-client','e-offer','e-notes'].forEach(id => document.getElementById(id).value = '');
+  document.getElementById('e-date').value = '';
+  document.getElementById('e-status').value = 'draft';
+  const aiGuests = document.getElementById('ev-guests');
+  if (aiGuests) document.getElementById('em-guests').value = aiGuests.value;
+  const aiType = document.getElementById('ev-type');
+  if (aiType) document.getElementById('em-type').value = aiType.value;
+  document.getElementById('em-product-rows').innerHTML = '';
+  lastAiAnalysis = null; lastEventData = null;
   new bootstrap.Modal(document.getElementById('eventModal')).show();
-}
-
-async function calcEventModal() {
-  const guests = parseInt(document.getElementById('em-guests').value);
-  if (!guests || guests < 1) { alert('Introdu numărul de invitați!'); return; }
-  const btn = document.getElementById('em-calc-btn');
-  btn.disabled = true;
-  btn.innerHTML = '<span class="spinner-fc"></span> Calculează...';
-  try {
-    const body = {
-      guestCount: guests,
-      durationHours: parseInt(document.getElementById('em-hours').value) || 4,
-      eventType: document.getElementById('em-type').value,
-      season: document.getElementById('em-season').value,
-      briefText: document.getElementById('em-brief').value,
-      menuItems: []
-    };
-    const data = await api('POST', '/events/analyze', body);
-    lastAiAnalysis = data.analysis;
-    lastEventData = body;
-    renderEventModalRecs(data.analysis);
-  } catch(e) { alert('Eroare: ' + e.message); }
-  finally {
-    btn.disabled = false;
-    btn.innerHTML = '<i class="bi bi-magic"></i> Calculează necesar';
-  }
-}
-
-function renderEventModalRecs(a) {
-  if (!a) return;
-  const warnEl = document.getElementById('em-warnings');
-  warnEl.innerHTML = (a.warnings||[]).map(w =>
-    `<div class="ai-warning mb-1"><i class="bi bi-exclamation-triangle"></i> ${w}</div>`).join('');
-
-  const recsEl = document.getElementById('em-recs');
-  recsEl.innerHTML = (a.recommendations||[]).map(r => `
-    <div class="d-flex justify-content-between align-items-center py-2" style="border-bottom:1px solid var(--fc-border);">
-      <div>
-        <span class="fw-semibold" style="font-size:.88rem;">${r.productName}</span>
-        ${r.warningMessage ? `<div class="text-warning" style="font-size:.76rem;"><i class="bi bi-exclamation-triangle"></i> ${r.warningMessage}</div>` : ''}
-        <div style="color:var(--fc-muted);font-size:.75rem;">${r.reason||''}</div>
-      </div>
-      <div class="text-end ms-3" style="white-space:nowrap;">
-        <span style="font-size:1.15rem;font-weight:700;color:var(--fc-primary);">${r.recommendedQuantity}</span>
-        <div style="color:var(--fc-muted);font-size:.75rem;">${r.recommendedUnit}</div>
-      </div>
-    </div>`).join('');
-
-  document.getElementById('em-result').classList.remove('d-none');
 }
 
 async function saveEvent() {
   const name = document.getElementById('e-name').value;
   if (!name) return alert('Introdu numele evenimentului');
+
+  // Colectează produsele adăugate manual
+  const menuItems = Array.from(document.querySelectorAll('.em-prod-row')).map(row => {
+    const sel = row.querySelector('.em-prod-select');
+    const qty = parseFloat(row.querySelector('.em-prod-qty').value) || 0;
+    const prod = allProducts.find(p => p._id === sel?.value);
+    if (!prod || !sel?.value) return null;
+    return { name: prod.name, quantity: qty, unit: prod.unit || '' };
+  }).filter(Boolean);
 
   const body = {
     name,
@@ -1641,14 +1623,14 @@ async function saveEvent() {
     offeredPrice: parseFloat(document.getElementById('e-offer').value) || 0,
     status: document.getElementById('e-status').value,
     notes: document.getElementById('e-notes').value,
-    guestCount: parseInt(document.getElementById('em-guests').value) || lastEventData?.guestCount || 0,
-    durationHours: parseInt(document.getElementById('em-hours').value) || lastEventData?.durationHours || 4,
-    eventType: document.getElementById('em-type').value || lastEventData?.eventType || 'altele',
-    season: document.getElementById('em-season').value || lastEventData?.season || 'vara',
-    briefText: document.getElementById('em-brief').value || lastEventData?.briefText || '',
-    menuItems: lastEventData?.menuItems || [],
-    aiAnalysis: lastAiAnalysis ? JSON.stringify(lastAiAnalysis) : '',
-    recommendations: lastAiAnalysis?.recommendations || []
+    guestCount: parseInt(document.getElementById('em-guests').value) || 0,
+    durationHours: 4,
+    eventType: document.getElementById('em-type').value || 'altele',
+    season: 'vara',
+    briefText: '',
+    menuItems,
+    aiAnalysis: '',
+    recommendations: []
   };
 
   try {
