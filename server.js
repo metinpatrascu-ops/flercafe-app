@@ -1476,6 +1476,10 @@ app.post('/api/offers/pdf', verifyToken, async (req, res) => {
     const totalOffer = (items || []).reduce((s, i) => s + (Number(i.totalPrice) || 0), 0);
     const totalCost = Math.round((totalOffer / 2.5) * 100) / 100;
     const profit = Math.round((totalOffer - totalCost) * 100) / 100;
+    const EUR_RATE = 5.0;
+    const guests = Number(guestCount) || 0;
+    const pricePerPersonEUR = guests > 0 ? (totalOffer / guests / EUR_RATE) : 0;
+    const pricePerPersonRON = guests > 0 ? (totalOffer / guests) : 0;
 
     const MARGIN = 50;
     const W = 495;
@@ -1585,6 +1589,19 @@ app.post('/api/offers/pdf', verifyToken, async (req, res) => {
     doc.font('Bold').fontSize(13).fillColor(GOLD)
        .text(`${totalOffer.toFixed(2)} LEI`, MARGIN + 12, rowY + 7, { width: W - 24, align: 'right' });
     rowY += 32;
+
+    // Pret per persoana box (vizibil doar daca stim nr. invitati)
+    if (guests > 0) {
+      rowY += 8;
+      doc.rect(MARGIN, rowY, W, 36).fill('#f5f0e8');
+      doc.rect(MARGIN, rowY, 4, 36).fill(GOLD);
+      doc.font('Bold').fontSize(18).fillColor(DARK)
+         .text(`${pricePerPersonEUR.toFixed(1)} EUR / persoana`, MARGIN + 14, rowY + 5);
+      doc.font('Regular').fontSize(9).fillColor(GRAY)
+         .text(`(${pricePerPersonRON.toFixed(1)} RON / persoana  ·  ${guests} invitati  ·  curs ${EUR_RATE} RON/EUR)`,
+           MARGIN + 14, rowY + 23);
+      rowY += 36;
+    }
 
     // Notes (if any)
     if (notes && notes.trim()) {
