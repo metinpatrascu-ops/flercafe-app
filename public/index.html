@@ -939,13 +939,26 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
               <tbody id="ed-consum-rows"></tbody>
             </table>
           </div>
-          <div class="mt-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
-            <div>
-              <strong style="color:var(--fc-primary);">Cost achiziție: <span id="ed-total-cost">0.00</span> RON</strong>
-              <span style="color:var(--fc-muted);font-size:.82rem;margin-left:12px;">→ Ofertă 2.5×: <span id="ed-total-offer" style="color:#C8A96E;font-weight:600;">0.00 RON</span></span>
+          <div class="mt-3 p-2 rounded" style="background:rgba(200,169,110,.07);border:1px solid rgba(200,169,110,.18);">
+            <div class="d-flex align-items-center flex-wrap gap-3 mb-2">
+              <div>
+                <span style="color:var(--fc-muted);font-size:.82rem;">Cost achiziție:</span>
+                <strong style="color:var(--fc-primary);margin-left:4px;"><span id="ed-total-cost">0.00</span> RON</strong>
+              </div>
+              <div class="d-flex align-items-center gap-1">
+                <label style="color:var(--fc-muted);font-size:.82rem;white-space:nowrap;">Preț dorit:</label>
+                <input type="number" id="ed-price-per-person" class="form-control form-control-sm"
+                  style="width:80px;background:#1e1e1e;border-color:rgba(200,169,110,.4);color:#C8A96E;font-weight:700;text-align:center;"
+                  placeholder="45" min="1" step="0.5" oninput="recalcConsumTotal()">
+                <span style="color:var(--fc-muted);font-size:.82rem;">€/pers</span>
+              </div>
+              <div>
+                <span style="color:var(--fc-muted);font-size:.82rem;">→ Ofertă totală:</span>
+                <span id="ed-total-offer" style="color:#C8A96E;font-weight:700;margin-left:4px;font-size:1rem;">0.00 RON</span>
+              </div>
             </div>
-            <div class="d-flex gap-2">
-              <button class="btn btn-outline-secondary btn-sm" onclick="saveConsum()" title="Salvează fără PDF">
+            <div class="d-flex justify-content-end gap-2">
+              <button class="btn btn-outline-secondary btn-sm" onclick="saveConsum()">
                 <i class="bi bi-floppy"></i> Salvează
               </button>
               <button class="btn btn-danger btn-sm" onclick="saveAndOfferPDF()" id="btn-offer-pdf">
@@ -1777,18 +1790,28 @@ function addConsumRow(item = {}) {
 }
 
 function recalcConsumTotal() {
-  let total = 0;
+  let totalCost = 0;
   document.querySelectorAll('#ed-consum-rows tr').forEach(tr => {
     const qty = parseFloat(tr.querySelector('.consum-qty')?.value) || 0;
     const price = parseFloat(tr.querySelector('.consum-price')?.value) || 0;
     const rowTotal = qty * price;
     const td = tr.querySelector('.consum-total');
     if (td) td.textContent = rowTotal > 0 ? rowTotal.toFixed(2) + ' RON' : '—';
-    total += rowTotal;
+    totalCost += rowTotal;
   });
-  document.getElementById('ed-total-cost').textContent = total.toFixed(2);
+  document.getElementById('ed-total-cost').textContent = totalCost.toFixed(2);
+
   const offerEl = document.getElementById('ed-total-offer');
-  if (offerEl) offerEl.textContent = (total * 2.5).toFixed(2) + ' RON';
+  if (!offerEl) return;
+  const eurPers = parseFloat(document.getElementById('ed-price-per-person')?.value) || 0;
+  const guests = currentEventData?.guestCount || 0;
+  if (eurPers > 0 && guests > 0) {
+    const totalOffer = eurPers * guests * EUR_RATE;
+    offerEl.textContent = totalOffer.toFixed(2) + ' RON  (' + eurPers.toFixed(1) + ' € × ' + guests + ' pers)';
+  } else {
+    // fallback: arată 2.5× dacă nu e introdus prețul/pers
+    offerEl.textContent = (totalCost * 2.5).toFixed(2) + ' RON  (2.5× cost)';
+  }
 }
 
 async function saveConsum() {
@@ -2143,23 +2166,39 @@ async function saveAndOfferPDF() {
     currentEventData.stockConsumed = saved.stockConsumed || stockConsumed;
     currentEventData.totalStockCost = saved.totalStockCost;
 
-    const MARKUP = 2.5;
     const ev = currentEventData;
+    const guests = ev.guestCount || 0;
 
-    // 3. Build PDF items with 2.5× sell price
+    // 3. Calculează prețul de ofertare
+    // Dacă utilizatorul a introdus un preț/pers în €, folosim aia; altfel 2.5× cost
+    const eurPersInput = parseFloat(document.getElementById('ed-price-per-person')?.value) || 0;
+    let totalOffer, markup;
+    if (eurPersInput > 0 && guests > 0) {
+      totalOffer = Math.round(eurPersInput * guests * EUR_RATE * 100) / 100;
+      markup = saved.totalStockCost > 0 ? totalOffer / saved.totalStockCost : 2.5;
+    } else {
+      markup = 2.5;
+      totalOffer = Math.round((saved.totalStockCost || 0) * markup * 100) / 100;
+    }
+
+    // Distribuie totalOffer proporțional pe produse (păstrând proporțiile de cost)
+    const totalCostCheck = (saved.stockConsumed || stockConsumed).reduce((s, i) => s + (i.totalCost || 0), 0);
     const items = (saved.stockConsumed || stockConsumed)
       .filter(i => i.quantity > 0)
-      .map(i => ({
-        name: i.productName,
-        quantity: i.quantity,
-        unit: i.unit,
-        unitPrice: Math.round((i.unitPrice || 0) * MARKUP * 100) / 100,
-        totalPrice: Math.round((i.totalCost || 0) * MARKUP * 100) / 100
-      }));
-
-    const totalOffer = items.reduce((s, i) => s + i.totalPrice, 0);
+      .map(i => {
+        const share = totalCostCheck > 0 ? (i.totalCost || 0) / totalCostCheck : 0;
+        const itemTotal = Math.round(totalOffer * share * 100) / 100;
+        return {
+          name: i.productName,
+          quantity: i.quantity,
+          unit: i.unit,
+          unitPrice: i.quantity > 0 ? Math.round(itemTotal / i.quantity * 100) / 100 : 0,
+          totalPrice: itemTotal
+        };
+      });
 
     // 4. Generate PDF
+    const eurPersPDF = guests > 0 ? totalOffer / guests / EUR_RATE : 0;
     const resp = await fetch('/api/offers/pdf', {
       method: 'POST',
       headers: { 'Authorization': 'Bearer ' + TOKEN, 'Content-Type': 'application/json' },
@@ -2167,9 +2206,11 @@ async function saveAndOfferPDF() {
         eventName: ev.name,
         clientName: ev.client || 'Mercedes-Benz',
         eventDate: ev.date,
-        guestCount: ev.guestCount,
+        guestCount: guests,
         durationHours: ev.durationHours,
-        notes: `Marjă aplicată: ${MARKUP}×. Cost achiziție: ${(saved.totalStockCost||0).toFixed(2)} RON. Ofertă: ${totalOffer.toFixed(2)} RON.`,
+        notes: eurPersInput > 0
+          ? `Pret oferta: ${eurPersInput.toFixed(1)} EUR/persoana × ${guests} invitati = ${totalOffer.toFixed(0)} RON total.`
+          : `Marja 2.5×. Cost achizitie: ${(saved.totalStockCost||0).toFixed(0)} RON. Oferta: ${totalOffer.toFixed(0)} RON.`,
         validity: 7,
         items
       })
