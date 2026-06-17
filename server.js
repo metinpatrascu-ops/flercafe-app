@@ -431,7 +431,37 @@ app.get('/api/events', verifyToken, async (req, res) => {
 
 app.post('/api/events', verifyToken, async (req, res) => {
   try {
-    const event = await Event.create(req.body);
+    const { menuItems, ...rest } = req.body;
+    const event = await Event.create(rest);
+
+    // Dacă există produse planificate → le salvăm direct ca stoc consumat cu prețuri
+    if (menuItems && menuItems.length > 0) {
+      const allProducts = await Product.find({ active: true }, 'name purchasePrice unit');
+      const stockConsumed = menuItems.map(item => {
+        const prod = allProducts.find(p =>
+          p.name.toLowerCase() === item.name.toLowerCase() ||
+          p.name.toLowerCase().includes(item.name.toLowerCase()) ||
+          item.name.toLowerCase().includes(p.name.toLowerCase())
+        );
+        const unitPrice = prod?.purchasePrice || 0;
+        const quantity = Number(item.quantity) || 0;
+        return {
+          productName: item.name,
+          quantity,
+          unit: item.unit || prod?.unit || 'buc',
+          unitPrice,
+          totalCost: Math.round(unitPrice * quantity * 100) / 100
+        };
+      });
+
+      const totalStockCost = Math.round(stockConsumed.reduce((s, i) => s + i.totalCost, 0) * 100) / 100;
+      const offeredPrice = Math.round(totalStockCost * 2.5 * 100) / 100;
+
+      await Event.findByIdAndUpdate(event._id, { stockConsumed, totalStockCost, offeredPrice });
+
+      return res.json({ ...event.toObject(), stockConsumed, totalStockCost, offeredPrice });
+    }
+
     res.json(event);
   } catch (e) {
     res.status(400).json({ error: e.message });
