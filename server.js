@@ -19,6 +19,13 @@ if (HAS_OPENAI) {
   openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 }
 
+const HAS_CLAUDE = !!process.env.ANTHROPIC_API_KEY;
+let anthropic = null;
+if (HAS_CLAUDE) {
+  const Anthropic = require('@anthropic-ai/sdk');
+  anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+}
+
 // ─── MONGOOSE ──────────────────────────────────────────────────────────────
 mongoose.connect(process.env.MONGODB_URI || 'mongodb://localhost:27017/flercafe')
   .then(() => console.log('MongoDB conectat'))
@@ -664,40 +671,68 @@ app.post('/api/events/analyze', verifyToken, async (req, res) => {
       return res.json({ analysis, usedAI: false });
     }
 
+    // Claude este AI-ul principal; GPT-4o e fallback; reguli e fallback final
     const menuText = (menuItems || []).map(m => `- ${m.name}: ${m.quantity} ${m.unit}`).join('\n');
-    const prompt = `Ești un consultant expert în baruri de evenimente și HoReCa din România.
-Analizează acest brief de eveniment și calculează EXACT ce cantități trebuie achiziționate.
 
-BRIEF: ${briefText || 'Nu a fost furnizat.'}
-Invitați: ${guestCount}, Durată: ${durationHours}h, Tip: ${eventType}, Sezon: ${season}
-Meniu client:\n${menuText || '(nespecificat)'}
+    const claudePrompt = `Ești un consultant expert în baruri de evenimente și HoReCa din România, cu 15 ani de experiență. Lucrezi pentru barul flērcafē.
 
-REGULI HoReCa:
-1. Apă plată: 0.75L/pers/4ore (+25% vara, +20% corporate)
-2. Apă minerală: 0.5L/pers/4ore (aceleași majorări)
-3. Soft drinks: 0.5L/pers
-4. Băuturi crafting/socată: 0.35L/pers
-5. Cocktailuri: 2.5/pers (−30% corporate)
-6. Prosecco: 1 sticlă = 6 pahare 125ml
-7. Gheață: 400g/pers bar + 300g/sticlă prosecco (+30% vara)
-8. Adaugă ÎNTOTDEAUNA +15% marjă de siguranță
+BRIEF EVENIMENT:
+- Client: ${clientName || 'nespecificat'}
+- Invitați: ${guestCount} persoane
+- Durată: ${durationHours || 4} ore
+- Tip eveniment: ${eventType}
+- Sezon: ${season}
+- Ce dorește clientul (meniu/cerințe): "${briefText || 'nespecificat'}"
+${menuText ? `- Produse specifice cerute:\n${menuText}` : ''}
 
-RETURNEAZĂ STRICT JSON:
-{"summary":"...","warnings":["..."],"recommendations":[{"productName":"...","category":"apa|soft|alcool|sirop|cafea|consumabile","estimatedConsumptionL":0,"recommendedQuantity":0,"recommendedUnit":"...","reason":"...","warningMessage":null}],"usedAI":true}`;
+SARCINA TA:
+1. Citește CU ATENȚIE ce a scris clientul în câmpul "Ce dorește clientul"
+2. Identifică EXACT produsele menționate și calculează cantitățile necesare pentru ${guestCount} invitați
+3. Dacă clientul menționează "heineken" → calculează bax-uri de bere Heineken; dacă menționează "socată" → calculează sticle/litri de socată etc.
+4. Adaugă și articolele critice care lipsesc (gheață, apă dacă nu e menționată)
+5. Aplică standardele HoReCa: bere ~1.5-2 sticle/pers, apă ~0.75L/pers/4ore, gheață ~400g/pers
 
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: 2500,
-      temperature: 0.2
-    });
+REGULI DE CALCUL:
+- Apă plată/minerală 330ml: împărți la 0.33L per sticlă → nr. sticle, grupate în baxuri de 24
+- Apă plată/minerală 750ml: împărți la 0.75L per sticlă → nr. sticle, baxuri de 12
+- Bere 330ml: ~1.5-2 sticle/pers → baxuri de 24
+- Bere 0% alcool: ~0.5-1 sticlă/pers
+- Socată/crafting: ~0.35L/pers → nr. sticle de 750ml sau 1L
+- Prosecco: 1 sticlă = 6 pahare de welcome
+- Gheață: ~400g/pers + extra 30% vara
+- Adaugă ÎNTOTDEAUNA +15% marjă de siguranță
 
-    let aiText = response.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
-    let analysis;
-    try { analysis = JSON.parse(aiText); }
-    catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }); }
+RETURNEAZĂ STRICT JSON valid (fără text extra, fără markdown):
+{"summary":"rezumat în 1-2 propoziții","warnings":["avertismente importante dacă există"],"recommendations":[{"productName":"numele exact al produsului","category":"apa|soft|alcool|sirop|cafea|consumabile|altele","estimatedConsumptionL":0.0,"recommendedQuantity":5,"recommendedUnit":"baxuri (24 sticle × 0.33L)","reason":"explicație calcul scurtă","warningMessage":null}],"usedAI":true}`;
 
-    res.json({ analysis, usedAI: true });
+    if (HAS_CLAUDE) {
+      const msg = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 2000,
+        messages: [{ role: 'user', content: claudePrompt }]
+      });
+      let aiText = msg.content[0].text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let analysis;
+      try { analysis = JSON.parse(aiText); }
+      catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }); }
+      return res.json({ analysis, usedAI: true, aiProvider: 'claude' });
+    }
+
+    if (HAS_OPENAI) {
+      const response = await openai.chat.completions.create({
+        model: 'gpt-4o',
+        messages: [{ role: 'user', content: claudePrompt }],
+        max_tokens: 2000,
+        temperature: 0.2
+      });
+      let aiText = response.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      let analysis;
+      try { analysis = JSON.parse(aiText); }
+      catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }); }
+      return res.json({ analysis, usedAI: true, aiProvider: 'openai' });
+    }
+
+    res.json({ analysis: ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }), usedAI: false });
   } catch (e) {
     // Fallback la reguli dacă AI-ul pică
     try {
@@ -1261,34 +1296,45 @@ app.post('/api/ai/chat', verifyToken, async (req, res) => {
 
     let eventData, analysis, reply;
 
-    if (HAS_OPENAI) {
-      const month = new Date().getMonth();
-      const defaultSeason = (month >= 4 && month <= 8) ? 'vara' : 'iarna';
-      const systemPrompt = `Ești asistentul AI al barului flērcafē din România. Analizezi brief-uri de evenimente și calculezi necesarul de băuturi. Comunici EXCLUSIV în română, prietenos și profesional.
+    const month = new Date().getMonth();
+    const defaultSeason = (month >= 4 && month <= 8) ? 'vara' : 'iarna';
 
-Extrage din mesajul utilizatorului:
-- Numele evenimentului sau al clientului
-- Numărul de invitați (integer)
+    const chatSystemPrompt = `Ești asistentul AI expert al barului flērcafē din România. Analizezi brief-uri de evenimente și calculezi necesarul de băuturi și produse. Comunici EXCLUSIV în română, prietenos și profesional.
+
+Din mesajul utilizatorului extrage:
+- Numele clientului/evenimentului
+- Numărul de invitați
 - Durata în ore (default 4)
 - Tipul: corporate | lansare | nunta | botez | petrecere | altele
-- Sezonul: vara | iarna (default: ${defaultSeason} bazat pe luna curentă)
-- Produse cerute explicit (ex: "20 sticle prosecco")
+- Sezonul: vara | iarna (default: ${defaultSeason})
+- Produsele menționate explicit cu cantitățile cerute
 
-Returnează STRICT JSON:
-{"eventName":"...","clientName":"...","guestCount":0,"durationHours":4,"eventType":"...","season":"vara","menuItems":[{"name":"...","quantity":0,"unit":"..."}],"reply":"mesaj prietenos confirmând că ai înțeles evenimentul și că urmează calculul"}`;
+Returnează STRICT JSON valid:
+{"eventName":"...","clientName":"...","guestCount":0,"durationHours":4,"eventType":"petrecere","season":"${defaultSeason}","menuItems":[{"name":"Heineken 0.33L","quantity":50,"unit":"sticle"}],"reply":"mesaj prietenos scurt că ai înțeles și urmează calculul"}`;
 
+    if (HAS_CLAUDE) {
+      const resp = await anthropic.messages.create({
+        model: 'claude-haiku-4-5-20251001',
+        max_tokens: 800,
+        system: chatSystemPrompt,
+        messages: [{ role: 'user', content: message }]
+      });
+      let txt = resp.content[0].text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
+      try { eventData = JSON.parse(txt); } catch { eventData = parseEventFromText(message); }
+      reply = eventData.reply || `Am înțeles! Calculez pentru ${eventData.guestCount} invitați...`;
+    } else if (HAS_OPENAI) {
       const resp = await openai.chat.completions.create({
         model: 'gpt-4o',
-        messages: [{ role: 'system', content: systemPrompt }, { role: 'user', content: message }],
+        messages: [{ role: 'system', content: chatSystemPrompt }, { role: 'user', content: message }],
         response_format: { type: 'json_object' },
         max_tokens: 700,
         temperature: 0.1
       });
-      eventData = JSON.parse(resp.choices[0].message.content);
+      try { eventData = JSON.parse(resp.choices[0].message.content); } catch { eventData = parseEventFromText(message); }
       reply = eventData.reply || `Am înțeles! Calculez pentru ${eventData.guestCount} invitați...`;
     } else {
       eventData = parseEventFromText(message);
-      reply = `Am înțeles! Calculez necesarul pentru ${eventData.eventType === 'corporate' ? 'evenimentul corporate' : 'evenimentul'} cu ${eventData.guestCount} invitați, ${eventData.durationHours} ore. Iată recomandările:`;
+      reply = `Am înțeles! Calculez necesarul pentru ${eventData.guestCount} invitați, ${eventData.durationHours} ore.`;
     }
 
     analysis = ruleBasedAnalysis(eventData);
