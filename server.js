@@ -540,120 +540,205 @@ app.get('/api/events/:id/stock-snapshot', verifyToken, async (req, res) => {
   }
 });
 
-// Calculator HoReCa bazat pe reguli — funcționează fără OpenAI
-function ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }) {
+// Catalog de produse cunoscute cu reguli de detecție din textul clientului
+const KNOWN_PRODUCTS = [
+  // Apă — ordinea contează: 330ml înainte de generic
+  { patterns: [/ap[aă]\s*plat[aă].*330|330.*ap[aă]\s*plat[aă]/i],
+    name: 'Apă Plată Premium 330ml', category: 'apa',
+    perPerson: 1.5, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  { patterns: [/ap[aă]\s*plat[aă]/i],
+    name: 'Apă Plată Premium 750ml', category: 'apa',
+    perPerson: 0.8, bottleL: 0.75, caseSize: 12, caseLabel: 'baxuri (12 sticle × 0.75L)' },
+  { patterns: [/ap[aă]\s*mineral[aă].*330|330.*ap[aă]\s*mineral[aă]/i],
+    name: 'Apă Minerală Premium 330ml', category: 'apa',
+    perPerson: 1.0, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  { patterns: [/ap[aă]\s*mineral[aă]/i],
+    name: 'Apă Minerală Premium 750ml', category: 'apa',
+    perPerson: 0.5, bottleL: 0.75, caseSize: 12, caseLabel: 'baxuri (12 sticle × 0.75L)' },
+  // Bere — 0% înainte de generic
+  { patterns: [/heineken\s*0%|heineken\s*zero|bere\s*0%|bere.*f[aă]r[aă]\s*alcool/i],
+    name: 'Heineken 0% Alcool 0.33L', category: 'soft',
+    perPerson: 0.8, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  { patterns: [/heineken|bere\b/i],
+    name: 'Bere Heineken 0.33L', category: 'alcool',
+    perPerson: 1.8, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  // Soft
+  { patterns: [/coca.?cola|cola\b|pepsi/i],
+    name: 'Coca-Cola 0.33L', category: 'soft',
+    perPerson: 0.8, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  { patterns: [/tonic[aă]|ap[aă]\s*tonic[aă]/i],
+    name: 'Apă Tonică 0.33L', category: 'soft',
+    perPerson: 0.5, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  { patterns: [/grapefruit\s*soda|soda.*grapefruit/i],
+    name: 'Soda Grapefruit 0.33L', category: 'soft',
+    perPerson: 0.4, bottleL: 0.33, caseSize: 24, caseLabel: 'baxuri (24 sticle × 0.33L)' },
+  // Băuturi crafting
+  { patterns: [/socat[aă]|sirop\s*soc\b/i],
+    name: 'Socată / Sirop Soc', category: 'sirop',
+    perPerson: 0.35, bottleL: 0.75, caseSize: 1, caseLabel: 'sticle 0.75L' },
+  { patterns: [/sirop/i],
+    name: 'Sirop Bar', category: 'sirop',
+    perPerson: 0.05, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  // Alcool spirtos
+  { patterns: [/prosecco|spumant|șampanie|sampanie/i],
+    name: 'Prosecco Bortolin', category: 'alcool',
+    perPerson: 1/6, bottleL: 0.75, caseSize: 1, caseLabel: 'sticle (1 sticlă = 6 pahare welcome)',
+    welcomeDrink: true },
+  { patterns: [/don\s*julio|tequila/i],
+    name: 'Don Julio Tequila', category: 'alcool',
+    perPerson: 0.04, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/johnnie|walker|whisky|whiskey/i],
+    name: 'Johnnie Walker', category: 'alcool',
+    perPerson: 0.04, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/bourbon|bulleit/i],
+    name: 'Bulleit Bourbon', category: 'alcool',
+    perPerson: 0.04, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/vodca|vodka|ketel/i],
+    name: 'Ketel One Vodka', category: 'alcool',
+    perPerson: 0.04, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/gin\b|tanqueray/i],
+    name: 'Tanqueray Gin', category: 'alcool',
+    perPerson: 0.04, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/aperol/i],
+    name: 'Aperol', category: 'alcool',
+    perPerson: 0.04, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/limoncello/i],
+    name: 'Limoncello', category: 'alcool',
+    perPerson: 0.03, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  { patterns: [/amaretto/i],
+    name: 'Amaretto', category: 'alcool',
+    perPerson: 0.03, bottleL: 0.7, caseSize: 1, caseLabel: 'sticle 0.7L' },
+  // Cafea
+  { patterns: [/cafea|espresso|coffee/i],
+    name: 'Cafea', category: 'cafea',
+    perPerson: 0.02, bottleL: 1, caseSize: 1, caseLabel: 'kg' },
+  // Fructe
+  { patterns: [/lime/i],
+    name: 'Lime', category: 'consumabile',
+    perPerson: 0.12, bottleL: 1, caseSize: 1, caseLabel: 'kg' },
+  { patterns: [/l[aă]m[aâ]i/i],
+    name: 'Lămâi', category: 'consumabile',
+    perPerson: 0.1, bottleL: 1, caseSize: 1, caseLabel: 'kg' },
+  { patterns: [/grapefruit/i],
+    name: 'Grapefruit', category: 'consumabile',
+    perPerson: 0.1, bottleL: 1, caseSize: 1, caseLabel: 'kg' },
+  { patterns: [/portocal/i],
+    name: 'Portocale', category: 'consumabile',
+    perPerson: 0.1, bottleL: 1, caseSize: 1, caseLabel: 'kg' },
+  { patterns: [/ment[aă]/i],
+    name: 'Mentă', category: 'consumabile',
+    perPerson: 0.01, bottleL: 1, caseSize: 1, caseLabel: 'kg' },
+];
+
+// Calculator inteligent — citește briefText și detectează produsele cerute
+function ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems, briefText }) {
   const n = guestCount;
   const h = durationHours || 4;
   const isCorporate = ['corporate', 'lansare'].includes(eventType);
   const isSummer = season === 'vara';
   const MARGIN = 1.15;
-
+  const durationMult = Math.max(1, h / 4);
   const waterMult = (isCorporate ? 1.2 : 1) * (isSummer ? 1.25 : 1);
   const iceMult = isSummer ? 1.3 : 1;
-  const durationMult = h / 4;
 
-  // Detectează meniu cerut din menuItems
-  const menuText = (menuItems || []).map(m => `${m.name} ${m.quantity} ${m.unit}`).join(' ').toLowerCase();
-  const hasProsecco = menuItems && menuItems.some(m => /prosecco|sampanie|vin spumant/i.test(m.name));
-  const proseccoCount = hasProsecco ? (menuItems.find(m => /prosecco|sampanie/i.test(m.name))?.quantity || 0) : 0;
+  // Textul de căutare — brief + menuItems combinate
+  const searchText = [
+    briefText || '',
+    (menuItems || []).map(m => m.name).join(' ')
+  ].join(' ').toLowerCase();
 
   const rec = [];
+  const detectedNames = new Set();
+  let proseccoQty = 0;
+  let hasAlcohol = false;
+  let hasWater = false;
 
-  // Apă plată
-  const waterStillL = n * 0.75 * waterMult * durationMult * MARGIN;
-  rec.push({
-    productName: 'Apă Plată 0.75L',
-    category: 'apa',
-    estimatedConsumptionL: +(waterStillL).toFixed(1),
-    recommendedQuantity: Math.ceil(waterStillL / (0.75 * 12)),
-    recommendedUnit: 'baxuri (12 sticle × 0.75L)',
-    reason: `0.75L/pers × ${n} inv. × factori ajustare ${isCorporate ? 'corporate' : ''} ${isSummer ? 'vară' : ''} + 15% marjă`,
-    warningMessage: null
-  });
+  // Detectează produsele menționate explicit în brief
+  for (const prod of KNOWN_PRODUCTS) {
+    if (prod.patterns.some(p => p.test(searchText))) {
+      if (detectedNames.has(prod.name)) continue;
+      detectedNames.add(prod.name);
 
-  // Apă minerală
-  const waterSparkL = n * 0.5 * waterMult * durationMult * MARGIN;
-  rec.push({
-    productName: 'Apă Minerală 0.75L',
-    category: 'apa',
-    estimatedConsumptionL: +(waterSparkL).toFixed(1),
-    recommendedQuantity: Math.ceil(waterSparkL / (0.75 * 12)),
-    recommendedUnit: 'baxuri (12 sticle × 0.75L)',
-    reason: `0.5L/pers × ${n} inv. + ajustări ${isSummer ? 'vară' : ''} + 15% marjă`,
-    warningMessage: null
-  });
+      const totalL = n * prod.perPerson * durationMult * MARGIN;
+      const qty = prod.caseSize > 1
+        ? Math.ceil(totalL / (prod.bottleL * prod.caseSize))
+        : Math.ceil(totalL / prod.bottleL);
 
-  // Soft drinks (Cola etc.)
-  const softL = n * 0.5 * durationMult * MARGIN;
-  rec.push({
-    productName: 'Cola / Soft Drinks 0.33L',
-    category: 'soft',
-    estimatedConsumptionL: +(softL).toFixed(1),
-    recommendedQuantity: Math.ceil(softL / (0.33 * 24)),
-    recommendedUnit: 'baxuri (24 sticle × 0.33L)',
-    reason: `~1.5 sticle/pers × ${n} invitați + 15% marjă`,
-    warningMessage: null
-  });
+      if (prod.welcomeDrink) {
+        // Prosecco: calcul pahare welcome
+        const minSticle = Math.ceil(n / 6);
+        proseccoQty = minSticle;
+        const warn = qty < minSticle
+          ? `⚠️ ${qty} sticle = ${qty * 6} pahare. Pentru ${n} invitați recomandăm minim ${minSticle} sticle.`
+          : null;
+        rec.push({
+          productName: prod.name,
+          category: prod.category,
+          estimatedConsumptionL: null,
+          recommendedQuantity: Math.max(qty, minSticle),
+          recommendedUnit: prod.caseLabel,
+          reason: `Welcome drink pentru ${n} invitați (1 sticlă = 6 pahare) + 15% marjă`,
+          warningMessage: warn
+        });
+      } else {
+        if (prod.category === 'apa') hasWater = true;
+        if (prod.category === 'alcool') hasAlcohol = true;
+        rec.push({
+          productName: prod.name,
+          category: prod.category,
+          estimatedConsumptionL: +(totalL).toFixed(1),
+          recommendedQuantity: qty,
+          recommendedUnit: prod.caseLabel,
+          reason: `${(prod.perPerson * durationMult).toFixed(2)}L/pers × ${n} inv. + 15% marjă`,
+          warningMessage: null
+        });
+      }
+    }
+  }
 
-  // Socată / crafting
-  const craftL = n * 0.35 * durationMult * MARGIN;
-  rec.push({
-    productName: 'Socată / Băutură Crafting',
-    category: 'sirop',
-    estimatedConsumptionL: +(craftL).toFixed(1),
-    recommendedQuantity: Math.ceil(craftL * 1000 / 300),
-    recommendedUnit: 'sticle / porții (300ml/porție)',
-    reason: `0.35L/pers × ${n} invitați + 15% marjă`,
-    warningMessage: null
-  });
-
-  // Cocktailuri
-  const cocktailPerPerson = isCorporate ? 1.8 : 2.5;
-  const cocktailsTotal = Math.ceil(n * cocktailPerPerson * durationMult * MARGIN);
-  rec.push({
-    productName: 'Cocktailuri (total porții)',
-    category: 'altele',
-    estimatedConsumptionL: null,
-    recommendedQuantity: cocktailsTotal,
-    recommendedUnit: 'porții',
-    reason: `${cocktailPerPerson} cocktailuri/pers × ${n} inv. ${isCorporate ? '(redus pt. corporate)' : ''} + 15%`,
-    warningMessage: isCorporate ? 'Eveniment corporate — consumul de alcool e mai mic. Compensează cu apă și soft.' : null
-  });
-
-  // Prosecco (dacă apare în meniu)
-  if (proseccoCount > 0) {
-    const pahare = proseccoCount * 6;
-    const warn = pahare < n ? `⚠️ ${proseccoCount} sticle = ${pahare} pahare. Pentru ${n} invitați nu ajunge! Recomandăm minim ${Math.ceil(n / 6)} sticle.` : null;
-    rec.push({
-      productName: 'Prosecco / Vin Spumant (welcome)',
-      category: 'alcool',
-      estimatedConsumptionL: null,
-      recommendedQuantity: warn ? Math.ceil(n / 6) : proseccoCount,
-      recommendedUnit: `sticle (1 sticlă = 6 pahare)`,
-      reason: `Welcome drink pentru ${n} invitați`,
-      warningMessage: warn
+  // Dacă nu s-a detectat nimic specific → adaugă pachete default
+  if (rec.length === 0 || !hasWater) {
+    const wL = n * 0.75 * waterMult * durationMult * MARGIN;
+    rec.unshift({
+      productName: 'Apă Plată Premium 750ml',
+      category: 'apa',
+      estimatedConsumptionL: +(wL).toFixed(1),
+      recommendedQuantity: Math.ceil(wL / (0.75 * 12)),
+      recommendedUnit: 'baxuri (12 sticle × 0.75L)',
+      reason: `0.75L/pers × ${n} inv. ${isSummer ? '+ 25% vară' : ''} + 15% marjă`,
+      warningMessage: null
+    });
+    const mL = n * 0.5 * waterMult * durationMult * MARGIN;
+    rec.splice(1, 0, {
+      productName: 'Apă Minerală Premium 750ml',
+      category: 'apa',
+      estimatedConsumptionL: +(mL).toFixed(1),
+      recommendedQuantity: Math.ceil(mL / (0.75 * 12)),
+      recommendedUnit: 'baxuri (12 sticle × 0.75L)',
+      reason: `0.5L/pers × ${n} inv. ${isSummer ? '+ 25% vară' : ''} + 15% marjă`,
+      warningMessage: null
     });
   }
 
-  // Gheață
-  const iceKg = Math.ceil((n * 0.4 + (proseccoCount * 0.3)) * iceMult * MARGIN);
+  // Gheață — întotdeauna necesară
+  const iceKg = Math.ceil((n * 0.4 + proseccoQty * 0.3) * iceMult * MARGIN);
   rec.push({
     productName: 'Gheață',
     category: 'consumabile',
     estimatedConsumptionL: null,
     recommendedQuantity: Math.ceil(iceKg / 5),
     recommendedUnit: `saci de 5kg (total ~${iceKg}kg)`,
-    reason: `400g/pers pentru bar + 300g per sticlă Prosecco + 15% marjă ${isSummer ? '+ 30% vară' : ''}`,
+    reason: `400g/pers bar${proseccoQty > 0 ? ` + 300g/sticlă prosecco` : ''}${isSummer ? ' + 30% vară' : ''} + 15% marjă`,
     warningMessage: isSummer ? 'Sezon cald — gheața se topește rapid. Asigură-te că ai congelator/ladă frigorifică.' : null
   });
 
   const warnings = [];
   if (isCorporate) warnings.push('Eveniment corporate/lansare: invitații vin cu mașina. Crește apa și soft-urile, reduci alcoolul.');
   if (isSummer) warnings.push('Temperaturi ridicate de vară: hidratarea este critică. Asigură-te că produsele sunt răcite înainte de eveniment.');
-  if (proseccoCount > 0 && proseccoCount * 6 < n) warnings.push(`Ai cerut ${proseccoCount} sticle Prosecco welcome, dar ai ${n} invitați. Nu vor ajunge!`);
 
+  const detectedList = [...detectedNames].join(', ');
   return {
-    summary: `Eveniment ${eventType} cu ${n} invitați pe durata de ${h} ore, sezon ${season}. ${isCorporate ? 'Profil corporate — consum moderat de alcool, mare de apă și soft.' : ''} Toate cantitățile includ o marjă de siguranță de +15%.`,
+    summary: `Eveniment ${eventType} cu ${n} invitați, ${h} ore, sezon ${season}.${detectedNames.size > 0 ? ` Produse detectate din brief: ${detectedList}.` : ' Pachete standard HoReCa.'} Cantitățile includ +15% marjă de siguranță.`,
     warnings,
     recommendations: rec,
     usedAI: false
@@ -665,9 +750,9 @@ app.post('/api/events/analyze', verifyToken, async (req, res) => {
     const { guestCount, durationHours, eventType, season, briefText, menuItems } = req.body;
     if (!guestCount || guestCount < 1) return res.status(400).json({ error: 'Număr invitați invalid' });
 
-    // Fără cheie OpenAI → calculator pe bază de reguli
-    if (!HAS_OPENAI) {
-      const analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems });
+    // Fără cheie API → calculator inteligent pe bază de reguli
+    if (!HAS_CLAUDE && !HAS_OPENAI) {
+      const analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems, briefText });
       return res.json({ analysis, usedAI: false });
     }
 
@@ -714,7 +799,7 @@ RETURNEAZĂ STRICT JSON valid (fără text extra, fără markdown):
       let aiText = msg.content[0].text.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       let analysis;
       try { analysis = JSON.parse(aiText); }
-      catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }); }
+      catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems, briefText }); }
       return res.json({ analysis, usedAI: true, aiProvider: 'claude' });
     }
 
@@ -728,16 +813,15 @@ RETURNEAZĂ STRICT JSON valid (fără text extra, fără markdown):
       let aiText = response.choices[0].message.content.replace(/```json\n?/g, '').replace(/```\n?/g, '').trim();
       let analysis;
       try { analysis = JSON.parse(aiText); }
-      catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }); }
+      catch { analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems, briefText }); }
       return res.json({ analysis, usedAI: true, aiProvider: 'openai' });
     }
 
-    res.json({ analysis: ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems }), usedAI: false });
+    res.json({ analysis: ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems, briefText }), usedAI: false });
   } catch (e) {
-    // Fallback la reguli dacă AI-ul pică
     try {
-      const { guestCount, durationHours, eventType, season, menuItems } = req.body;
-      const analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems });
+      const { guestCount, durationHours, eventType, season, menuItems, briefText } = req.body;
+      const analysis = ruleBasedAnalysis({ guestCount, durationHours, eventType, season, menuItems, briefText });
       res.json({ analysis, usedAI: false });
     } catch (e2) {
       res.status(500).json({ error: e.message });
