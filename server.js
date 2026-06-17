@@ -1304,63 +1304,90 @@ app.post('/api/offers/pdf', verifyToken, async (req, res) => {
     const PDFDocument = require('pdfkit');
     const { eventName, clientName, eventDate, guestCount, durationHours, items, notes, validity } = req.body;
 
-    const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `Ofertă ${eventName}`, Author: 'flērcafē' } });
+    const FONT_R = path.join(__dirname, 'fonts', 'NotoSans-Regular.ttf');
+    const FONT_B = path.join(__dirname, 'fonts', 'NotoSans-Bold.ttf');
+
+    const doc = new PDFDocument({ size: 'A4', margin: 0, info: { Title: `Oferta ${eventName}`, Author: 'flercafe' } });
+    doc.registerFont('Regular', FONT_R);
+    doc.registerFont('Bold', FONT_B);
+
     const dateStr = new Date().toLocaleDateString('ro-RO');
     const offerNo = `FC-${Date.now().toString().slice(-6)}`;
-    const totalValue = (items || []).reduce((s, i) => s + (Number(i.totalPrice) || 0), 0);
+    const totalOffer = (items || []).reduce((s, i) => s + (Number(i.totalPrice) || 0), 0);
+    const totalCost = Math.round((totalOffer / 2.5) * 100) / 100;
+    const profit = Math.round((totalOffer - totalCost) * 100) / 100;
+
     const MARGIN = 50;
     const W = 495;
     const GOLD = '#C8A96E';
     const DARK = '#1a1a1a';
-    const GRAY = '#666666';
+    const GRAY = '#555555';
+    const GREEN = '#2d7d46';
+    const FOOTER_Y = 775;
 
     res.setHeader('Content-Type', 'application/pdf');
     const safeFilename = (eventName || 'eveniment')
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')  // strip diacritics
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-zA-Z0-9\-_]/g, '-')
       .replace(/-+/g, '-').replace(/^-|-$/g, '');
     res.setHeader('Content-Disposition', `attachment; filename="Oferta-${safeFilename}-flercafe.pdf"`);
     doc.pipe(res);
 
-    // Header bar
-    doc.rect(0, 0, 595, 110).fill(DARK);
-    doc.fontSize(26).fillColor(GOLD).font('Helvetica-Bold')
-       .text('flērcafē', MARGIN, 28, { align: 'center', width: W });
-    doc.fontSize(10).fillColor('#aaaaaa').font('Helvetica')
-       .text('OFERTĂ DE SERVICII EVENIMENT', MARGIN, 62, { align: 'center', width: W });
-    doc.moveTo(MARGIN, 80).lineTo(545, 80).strokeColor(GOLD).lineWidth(0.5).stroke();
-    doc.fontSize(8).fillColor('#888888')
-       .text(`Nr. ofertă: ${offerNo}  |  Data: ${dateStr}  |  Valabilitate: ${validity || 7} zile`, MARGIN, 88, { align: 'center', width: W });
+    // ═══════════════════ PAGE 1 ═══════════════════
 
-    // Info box
-    doc.rect(0, 110, 595, 68).fill('#f7f4ef');
-    doc.fontSize(8).fillColor(GRAY).font('Helvetica')
-       .text('CLIENT:', MARGIN, 124).text('EVENIMENT:', 310, 124)
-       .text('NR. INVITAȚI:', MARGIN, 140).text('DATA EVENIMENT:', 310, 140)
-       .text('DURATĂ:', MARGIN, 156).text('', 310, 156);
-    doc.fontSize(9).fillColor(DARK).font('Helvetica-Bold')
-       .text(clientName || '—', MARGIN + 58, 124)
-       .text(eventName || '—', 310 + 78, 124)
-       .text(`${guestCount || '—'} persoane`, MARGIN + 80, 140)
-       .text(eventDate ? new Date(eventDate).toLocaleDateString('ro-RO') : '—', 310 + 106, 140)
-       .text(`${durationHours || 4} ore`, MARGIN + 55, 156);
+    // Brand header — white background, large black text
+    doc.font('Bold').fontSize(30).fillColor(DARK)
+       .text('FLERCAFE', MARGIN, 42, { align: 'center', width: W });
+    doc.font('Regular').fontSize(9.5).fillColor(GRAY)
+       .text('CENTRALIZATOR BUGET & OFERTARE EVENIMENT', MARGIN, 78, { align: 'center', width: W });
 
-    // Table
-    const tY = 195;
+    // Double rule under title
+    doc.moveTo(MARGIN, 97).lineTo(MARGIN + W, 97).strokeColor(DARK).lineWidth(1.2).stroke();
+    doc.moveTo(MARGIN, 100).lineTo(MARGIN + W, 100).strokeColor(GOLD).lineWidth(0.5).stroke();
+
+    // Info block
+    const infoY = 116;
+    const half = W / 2 - 10;
+    const col1X = MARGIN;
+    const col2X = MARGIN + W / 2 + 10;
+
+    const drawInfo = (label, value, x, y) => {
+      doc.font('Regular').fontSize(7.5).fillColor(GRAY).text(label, x, y);
+      doc.font('Bold').fontSize(9).fillColor(DARK).text(value || '—', x, y + 11);
+    };
+    drawInfo('BENEFICIAR FINAL', clientName || '', col1X, infoY);
+    drawInfo('AUDIENTA', `${guestCount || '—'} persoane`, col2X, infoY);
+    drawInfo('DATA EVENIMENT', eventDate ? new Date(eventDate).toLocaleDateString('ro-RO') : '—', col1X, infoY + 32);
+    drawInfo('MANAGER PROIECT', 'Patrascu Alexandru Metin', col2X, infoY + 32);
+
+    // Light separator
+    const sep1Y = infoY + 62;
+    doc.moveTo(MARGIN, sep1Y).lineTo(MARGIN + W, sep1Y).strokeColor('#dddddd').lineWidth(0.5).stroke();
+
+    // Section 1 header with gold left border
+    const sec1Y = sep1Y + 14;
+    doc.rect(MARGIN, sec1Y, 4, 20).fill(GOLD);
+    doc.font('Bold').fontSize(9.5).fillColor(DARK)
+       .text('1. OFERTARE CLIENT (MARJA 2.5x)', MARGIN + 10, sec1Y + 3);
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text('Preturi finale de ofertare catre client', MARGIN + 10, sec1Y + 16);
+
+    // Products table
+    const tY = sec1Y + 36;
     const cols = [
-      { label: 'Nr.', w: 25, align: 'center' },
-      { label: 'Produs / Descriere', w: 185, align: 'left' },
-      { label: 'Cantitate', w: 65, align: 'center' },
-      { label: 'U.M.', w: 65, align: 'left' },
-      { label: 'Preț unitar', w: 75, align: 'right' },
-      { label: 'Total RON', w: 80, align: 'right' }
+      { label: '#', w: 22, align: 'center' },
+      { label: 'PRODUS', w: 185, align: 'left' },
+      { label: 'CANT.', w: 50, align: 'center' },
+      { label: 'U.M.', w: 42, align: 'left' },
+      { label: 'PRET/UM', w: 82, align: 'right' },
+      { label: 'TOTAL (LEI)', w: 114, align: 'right' }
     ];
     const colX = [MARGIN];
     cols.forEach((c, i) => colX.push(colX[i] + c.w));
 
-    // Header row
+    // Table header
     doc.rect(MARGIN, tY, W, 20).fill(DARK);
-    doc.fontSize(8).fillColor('#ffffff').font('Helvetica-Bold');
+    doc.font('Bold').fontSize(7.5).fillColor('#ffffff');
     cols.forEach((c, i) => {
       doc.text(c.label, colX[i] + 3, tY + 6, { width: c.w - 6, align: c.align });
     });
@@ -1368,53 +1395,128 @@ app.post('/api/offers/pdf', verifyToken, async (req, res) => {
     // Data rows
     let rowY = tY + 20;
     (items || []).forEach((item, idx) => {
-      const rh = 20;
-      doc.rect(MARGIN, rowY, W, rh).fill(idx % 2 === 0 ? '#fdf9f3' : '#ffffff');
-      doc.fontSize(8).fillColor(DARK).font('Helvetica');
-      doc.text(`${idx + 1}`, colX[0] + 3, rowY + 6, { width: cols[0].w - 6, align: 'center' });
-      doc.text(item.name || '', colX[1] + 3, rowY + 6, { width: cols[1].w - 6 });
-      doc.text(`${item.quantity || ''}`, colX[2] + 3, rowY + 6, { width: cols[2].w - 6, align: 'center' });
-      doc.text(item.unit || '', colX[3] + 3, rowY + 6, { width: cols[3].w - 6 });
-      doc.text(`${Number(item.unitPrice || 0).toFixed(2)} RON`, colX[4] + 3, rowY + 6, { width: cols[4].w - 6, align: 'right' });
-      doc.text(`${Number(item.totalPrice || 0).toFixed(2)} RON`, colX[5] + 3, rowY + 6, { width: cols[5].w - 6, align: 'right' });
+      const rh = 18;
+      doc.rect(MARGIN, rowY, W, rh).fill(idx % 2 === 0 ? '#f9f7f3' : '#ffffff');
+      doc.font('Regular').fontSize(8).fillColor(DARK);
+      doc.text(`${idx + 1}`, colX[0] + 3, rowY + 5, { width: cols[0].w - 6, align: 'center' });
+      doc.text(item.name || '', colX[1] + 3, rowY + 5, { width: cols[1].w - 6 });
+      doc.text(`${item.quantity || ''}`, colX[2] + 3, rowY + 5, { width: cols[2].w - 6, align: 'center' });
+      doc.text(item.unit || '', colX[3] + 3, rowY + 5, { width: cols[3].w - 6 });
+      doc.text(`${Number(item.unitPrice || 0).toFixed(2)}`, colX[4] + 3, rowY + 5, { width: cols[4].w - 6, align: 'right' });
+      doc.font('Bold').fontSize(8).text(`${Number(item.totalPrice || 0).toFixed(2)} lei`, colX[5] + 3, rowY + 5, { width: cols[5].w - 6, align: 'right' });
       rowY += rh;
     });
 
-    // Table border
-    doc.rect(MARGIN, tY, W, rowY - tY).strokeColor(GOLD).lineWidth(0.5).stroke();
+    // Subtotal row
+    doc.rect(MARGIN, rowY, W, 20).fill('#ede9e0');
+    doc.font('Bold').fontSize(8).fillColor(DARK);
+    doc.text('SUBTOTAL', colX[1] + 3, rowY + 6);
+    doc.text(`${totalOffer.toFixed(2)} lei`, colX[5] + 3, rowY + 6, { width: cols[5].w - 6, align: 'right' });
+    rowY += 20;
 
-    // Total bar
-    rowY += 8;
-    doc.rect(350, rowY, 195, 28).fill(DARK);
-    doc.fontSize(9).fillColor('#aaaaaa').font('Helvetica')
-       .text('TOTAL OFERTĂ:', 358, rowY + 8);
-    doc.fontSize(11).fillColor(GOLD).font('Helvetica-Bold')
-       .text(`${totalValue.toFixed(2)} RON`, 358, rowY + 8, { width: 179, align: 'right' });
+    // Table border outline
+    doc.rect(MARGIN, tY, W, rowY - tY).strokeColor('#cccccc').lineWidth(0.5).stroke();
 
-    // Notes
-    rowY += 48;
+    // Total dark box
+    rowY += 12;
+    doc.rect(MARGIN, rowY, W, 32).fill(DARK);
+    doc.font('Regular').fontSize(9).fillColor('#aaaaaa')
+       .text('TOTAL OFERTARE CLIENT:', MARGIN + 12, rowY + 9);
+    doc.font('Bold').fontSize(13).fillColor(GOLD)
+       .text(`${totalOffer.toFixed(2)} LEI`, MARGIN + 12, rowY + 7, { width: W - 24, align: 'right' });
+    rowY += 32;
+
+    // Notes (if any)
     if (notes && notes.trim()) {
-      doc.fontSize(8).fillColor(DARK).font('Helvetica-Bold').text('Observații:', MARGIN, rowY);
-      rowY += 14;
-      doc.fontSize(8).fillColor(GRAY).font('Helvetica').text(notes, MARGIN, rowY, { width: W });
-      rowY += 30;
+      rowY += 12;
+      doc.font('Bold').fontSize(8).fillColor(DARK).text('Observatii:', MARGIN, rowY);
+      rowY += 12;
+      doc.font('Regular').fontSize(8).fillColor(GRAY).text(notes, MARGIN, rowY, { width: W });
+      rowY += 28;
     }
 
-    // Terms box
-    rowY += 10;
-    doc.rect(MARGIN, rowY, W, 36).fill('#f7f4ef');
-    doc.fontSize(7.5).fillColor(GRAY).font('Helvetica')
-       .text('Termeni și condiții:', MARGIN + 8, rowY + 6, { continued: false })
-       .text(`• Prețurile includ TVA și sunt valabile ${validity || 7} zile de la data emiterii.`, MARGIN + 8, rowY + 16)
-       .text('• Cantitățile recomandate sunt estimate pe baza standardelor HoReCa + 15% marjă de siguranță.', MARGIN + 8, rowY + 26);
+    // Footer page 1
+    doc.moveTo(MARGIN, FOOTER_Y).lineTo(MARGIN + W, FOOTER_Y).dash(3, { space: 3 }).strokeColor('#bbbbbb').lineWidth(0.5).stroke();
+    doc.undash();
+    doc.font('Bold').fontSize(7.5).fillColor(DARK).text('Intocmit,', MARGIN, FOOTER_Y + 9);
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY).text('Patrascu Alexandru Metin', MARGIN, FOOTER_Y + 20);
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text(`Data Documentului: ${dateStr}`, MARGIN, FOOTER_Y + 9, { width: W, align: 'center' });
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text('Pagina 1', MARGIN, FOOTER_Y + 20, { width: W, align: 'right' });
 
-    // Footer
-    doc.rect(0, 780, 595, 61).fill(DARK);
-    doc.moveTo(MARGIN, 788).lineTo(545, 788).strokeColor(GOLD).lineWidth(0.5).stroke();
-    doc.fontSize(8).fillColor(GOLD).font('Helvetica-Bold')
-       .text('flērcafē', MARGIN, 796, { align: 'center', width: W });
-    doc.fontSize(7).fillColor('#888888').font('Helvetica')
-       .text('Ofertă generată automat de sistemul flērcafē  |  Toate drepturile rezervate', MARGIN, 810, { align: 'center', width: W });
+    // ═══════════════════ PAGE 2 ═══════════════════
+    doc.addPage();
+
+    // Small brand header
+    doc.font('Bold').fontSize(20).fillColor(DARK)
+       .text('FLERCAFE', MARGIN, 40, { align: 'center', width: W });
+    doc.moveTo(MARGIN, 66).lineTo(MARGIN + W, 66).strokeColor(DARK).lineWidth(0.8).stroke();
+    doc.moveTo(MARGIN, 69).lineTo(MARGIN + W, 69).strokeColor(GOLD).lineWidth(0.4).stroke();
+
+    // Section 2 header
+    const sec2Y = 88;
+    doc.rect(MARGIN, sec2Y, 4, 20).fill(GOLD);
+    doc.font('Bold').fontSize(9.5).fillColor(DARK)
+       .text('2. PROIECTIE FINANCIARA (UZ INTERN)', MARGIN + 10, sec2Y + 3);
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text('Calculul marjei brute estimate pentru acest eveniment', MARGIN + 10, sec2Y + 16);
+
+    // Financial table
+    const ftY = sec2Y + 40;
+    const LW = 330;
+    const VW = W - LW;
+
+    doc.rect(MARGIN, ftY, W, 20).fill(DARK);
+    doc.font('Bold').fontSize(8).fillColor('#ffffff');
+    doc.text('INDICATOR FINANCIAR', MARGIN + 8, ftY + 6);
+    doc.text('VALOARE (LEI)', MARGIN + LW + 8, ftY + 6, { width: VW - 16, align: 'right' });
+
+    let fy = ftY + 20;
+
+    // Row 1: Total offer
+    doc.rect(MARGIN, fy, W, 24).fill('#f9f7f3');
+    doc.font('Regular').fontSize(9).fillColor(DARK).text('Ofertare Totala Client', MARGIN + 8, fy + 7);
+    doc.font('Bold').fontSize(9).fillColor(DARK)
+       .text(`${totalOffer.toFixed(2)} lei`, MARGIN + LW + 8, fy + 7, { width: VW - 16, align: 'right' });
+    fy += 24;
+
+    // Row 2: Cost
+    doc.rect(MARGIN, fy, W, 24).fill('#ffffff');
+    doc.font('Regular').fontSize(9).fillColor(DARK).text('Minus Cost Achizitie Marfa (investitie)', MARGIN + 8, fy + 7);
+    doc.font('Bold').fontSize(9).fillColor('#cc3333')
+       .text(`- ${totalCost.toFixed(2)} lei`, MARGIN + LW + 8, fy + 7, { width: VW - 16, align: 'right' });
+    fy += 24;
+
+    // Row 3: Profit (green highlight)
+    doc.rect(MARGIN, fy, W, 28).fill('#e6f4ea');
+    doc.font('Bold').fontSize(10).fillColor(GREEN).text('MARJA BRUTA (PROFIT ESTIMAT)', MARGIN + 8, fy + 8);
+    doc.font('Bold').fontSize(10).fillColor(GREEN)
+       .text(`${profit.toFixed(2)} lei`, MARGIN + LW + 8, fy + 8, { width: VW - 16, align: 'right' });
+    fy += 28;
+
+    // Table border
+    doc.rect(MARGIN, ftY, W, fy - ftY).strokeColor('#cccccc').lineWidth(0.5).stroke();
+
+    // Note text
+    fy += 18;
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text('* Din marja bruta se vor scadea eventualele costuri operationale suplimentare (transport, personal extern, spatii externe etc.)', MARGIN, fy, { width: W });
+
+    // Offer number
+    fy += 22;
+    doc.font('Regular').fontSize(7.5).fillColor('#aaaaaa')
+       .text(`Nr. oferta intern: ${offerNo}`, MARGIN, fy);
+
+    // Footer page 2
+    doc.moveTo(MARGIN, FOOTER_Y).lineTo(MARGIN + W, FOOTER_Y).dash(3, { space: 3 }).strokeColor('#bbbbbb').lineWidth(0.5).stroke();
+    doc.undash();
+    doc.font('Bold').fontSize(7.5).fillColor(DARK).text('Intocmit,', MARGIN, FOOTER_Y + 9);
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY).text('Patrascu Alexandru Metin', MARGIN, FOOTER_Y + 20);
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text(`Data Documentului: ${dateStr}`, MARGIN, FOOTER_Y + 9, { width: W, align: 'center' });
+    doc.font('Regular').fontSize(7.5).fillColor(GRAY)
+       .text('Pagina 2', MARGIN, FOOTER_Y + 20, { width: W, align: 'right' });
 
     doc.end();
   } catch (e) {
