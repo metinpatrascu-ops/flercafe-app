@@ -1929,6 +1929,7 @@ function renderFinanciar(ev) {
 async function loadRecipes() {
   try {
     const recipes = await api('GET', '/recipes');
+    allRecipes = recipes; // sync global so consum dropdown is always fresh
     const grid = document.getElementById('recipes-grid');
     if (recipes.length === 0) {
       grid.innerHTML = '<div class="col-12 text-center py-4" style="color:var(--fc-muted);">Nicio rețetă adăugată. Adaugă prima ta rețetă de cocktail!</div>';
