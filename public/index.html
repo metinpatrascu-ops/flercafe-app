@@ -1033,6 +1033,7 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
 // ── STATE ───────────────────────────────────────────────────────────────────
 let TOKEN = localStorage.getItem('fc_token');
 let allProducts = [];
+let allRecipes = [];
 let currentOcrInvoiceId = null;
 let lastAiAnalysis = null;
 let lastEventData = null;
@@ -1061,6 +1062,7 @@ function showApp() {
   document.getElementById('auth-screen').style.display = 'none';
   document.getElementById('app-screen').style.display = 'block';
   loadProducts();
+  loadAllRecipes();
   loadDashboard();
 }
 
@@ -1213,6 +1215,12 @@ async function loadProducts() {
     allProducts = await api('GET', '/products');
     renderStockTable();
     refreshProductSelects();
+  } catch (e) { console.error(e); }
+}
+
+async function loadAllRecipes() {
+  try {
+    allRecipes = await api('GET', '/recipes');
   } catch (e) { console.error(e); }
 }
 
@@ -1765,12 +1773,21 @@ function renderConsumRows(items) {
 }
 
 function buildProductOptions(selectedName) {
-  const opts = allProducts
+  const prodOpts = allProducts
     .slice()
     .sort((a, b) => a.name.localeCompare(b.name, 'ro'))
     .map(p => `<option value="${p.name}" data-price="${p.purchasePrice||0}" data-unit="${p.unit||'buc'}" ${p.name === selectedName ? 'selected' : ''}>${p.name} — ${p.purchasePrice ? p.purchasePrice.toFixed(2)+' RON' : 'fără preț'}</option>`)
     .join('');
-  return `<option value="">— Alege produs —</option>${opts}`;
+
+  const recipeOpts = allRecipes
+    .slice()
+    .sort((a, b) => a.name.localeCompare(b.name, 'ro'))
+    .map(r => `<option value="${r.name}" data-price="${r.sellingPrice||0}" data-unit="portii" data-recipe="1" ${r.name === selectedName ? 'selected' : ''}>🍹 ${r.name} — ${r.sellingPrice ? r.sellingPrice.toFixed(2)+' RON' : 'fără preț'}</option>`)
+    .join('');
+
+  return `<option value="">— Alege produs —</option>
+    ${prodOpts}
+    ${recipeOpts ? `<option disabled>──── Cocktailuri / Rețete ────</option>${recipeOpts}` : ''}`;
 }
 
 function onConsumProductChange(sel) {
