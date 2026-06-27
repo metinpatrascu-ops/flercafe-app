@@ -119,6 +119,11 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
 .chip-group { display: flex; gap: 8px; flex-wrap: wrap; }
 .chip { padding: 6px 14px; border-radius: 20px; border: 1px solid var(--fc-border); background: transparent; color: var(--fc-muted); cursor: pointer; font-size: .85rem; transition: all .15s; }
 .chip.selected { background: var(--fc-primary); border-color: var(--fc-primary); color: #111; font-weight: 600; }
+.cdrop-header { padding:4px 10px; font-size:.7rem; color:var(--fc-muted); font-weight:700; text-transform:uppercase; letter-spacing:.06em; background:#111; border-bottom:1px solid rgba(255,255,255,.06); }
+.cdrop-item { padding:7px 10px; cursor:pointer; font-size:.85rem; color:#e0e0e0; display:flex; justify-content:space-between; align-items:center; }
+.cdrop-item:hover { background:rgba(200,169,110,.18); color:#fff; }
+.cdrop-price { font-size:.75rem; color:var(--fc-primary); font-weight:600; white-space:nowrap; margin-left:8px; }
+.consum-search-inp::placeholder { color:rgba(255,255,255,.3); font-style:italic; }
 </style>
 </head>
 <body>
@@ -1800,14 +1805,72 @@ function onConsumProductChange(sel) {
   recalcConsumTotal();
 }
 
+function buildConsumDropHtml(query) {
+  const q = (query || '').toLowerCase().trim();
+  let html = '';
+  const prods = allProducts.filter(p => !q || p.name.toLowerCase().includes(q));
+  if (prods.length) {
+    html += `<div class="cdrop-header">Stoc produse</div>`;
+    prods.forEach(p => {
+      const esc = p.name.replace(/'/g,"&#39;");
+      html += `<div class="cdrop-item" onmousedown="selectConsumDrop(this,'${esc}',${p.purchasePrice||0},'${p.unit||'buc'}')">${p.name} <span class="cdrop-price">${(p.purchasePrice||0).toFixed(2)} RON</span></div>`;
+    });
+  }
+  const recs = (allRecipes || []).filter(r => !q || r.name.toLowerCase().includes(q));
+  if (recs.length) {
+    html += `<div class="cdrop-header">🍹 Cocktailuri</div>`;
+    recs.forEach(r => {
+      const esc = r.name.replace(/'/g,"&#39;");
+      const cost = r.costPerServing || 0;
+      html += `<div class="cdrop-item" onmousedown="selectConsumDrop(this,'${esc}',${cost},'portie')">${r.name} <span class="cdrop-price">${cost.toFixed(2)} RON/portie</span></div>`;
+    });
+  }
+  return html || `<div class="cdrop-header" style="color:var(--fc-muted);">Niciun rezultat</div>`;
+}
+
+function openConsumDrop(inp) {
+  const drop = inp.parentElement.querySelector('.cdrop');
+  drop.innerHTML = buildConsumDropHtml(inp.value);
+  drop.style.display = 'block';
+}
+
+function filterConsumDrop(inp) {
+  const drop = inp.parentElement.querySelector('.cdrop');
+  drop.innerHTML = buildConsumDropHtml(inp.value);
+  drop.style.display = 'block';
+}
+
+function closeConsumDrop(inp) {
+  setTimeout(() => { inp.parentElement.querySelector('.cdrop').style.display = 'none'; }, 180);
+}
+
+function selectConsumDrop(el, name, price, unit) {
+  const picker = el.closest('.consum-picker');
+  picker.querySelector('.consum-search-inp').value = name;
+  picker.querySelector('.consum-name').value = name;
+  picker.querySelector('.cdrop').style.display = 'none';
+  const tr = picker.closest('tr');
+  if (price) tr.querySelector('.consum-price').value = parseFloat(price).toFixed(2);
+  tr.querySelector('.consum-unit').value = unit;
+  recalcConsumTotal();
+}
+
 function addConsumRow(item = {}) {
   const tr = document.createElement('tr');
   const total = item.totalCost || (item.quantity && item.unitPrice ? item.quantity * item.unitPrice : 0);
+  const displayName = item.productName || '';
   tr.innerHTML = `
-    <td style="min-width:200px;">
-      <select class="form-select form-select-sm consum-name" onchange="onConsumProductChange(this)">
-        ${buildProductOptions(item.productName||'')}
-      </select>
+    <td style="min-width:220px;">
+      <div class="consum-picker" style="position:relative;">
+        <input type="text" class="form-control form-control-sm consum-search-inp"
+          placeholder="Caută produs sau cocktail..."
+          value="${displayName.replace(/"/g,'&quot;')}"
+          oninput="filterConsumDrop(this)"
+          onfocus="openConsumDrop(this)"
+          onblur="closeConsumDrop(this)">
+        <input type="hidden" class="consum-name" value="${displayName.replace(/"/g,'&quot;')}">
+        <div class="cdrop" style="display:none;position:absolute;z-index:2000;width:320px;max-height:260px;overflow-y:auto;background:#1a1a1a;border:1px solid rgba(200,169,110,.3);border-radius:6px;top:calc(100% + 2px);left:0;box-shadow:0 8px 24px rgba(0,0,0,.6);"></div>
+      </div>
     </td>
     <td><input type="number" class="form-control form-control-sm consum-qty" value="${item.quantity||''}" placeholder="0" min="0" step="0.1" oninput="recalcConsumTotal()" style="width:75px;"></td>
     <td><input type="text" class="form-control form-control-sm consum-unit" value="${item.unit||'buc'}" placeholder="buc" style="width:65px;"></td>
