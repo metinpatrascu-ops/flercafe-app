@@ -164,6 +164,16 @@ const uploadExcel = multer({
   }
 });
 
+const uploadPDF = multer({
+  dest: 'public/uploads/',
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const ok = file.mimetype === 'application/pdf' || file.originalname.match(/\.pdf$/i);
+    if (ok) cb(null, true);
+    else cb(new Error('Doar fișiere PDF sunt acceptate'));
+  }
+});
+
 // ─── AUTH MIDDLEWARE ────────────────────────────────────────────────────────
 function verifyToken(req, res, next) {
   const auth = req.headers.authorization || (req.query.token ? `Bearer ${req.query.token}` : null);
@@ -1162,6 +1172,107 @@ app.post('/api/stock/import-excel', verifyToken, uploadExcel.single('file'), asy
     if (!parts.length) parts.push('Nu am detectat date de importat. Verifică formatul fișierului.');
 
     res.json({ ok: true, message: parts.join(' · '), results });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/stock/import-pdf', verifyToken, uploadPDF.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ error: 'Niciun fișier PDF încărcat' });
+
+    const pdfParse = require('pdf-parse');
+    const fileBuffer = fs.readFileSync(req.file.path);
+    fs.unlinkSync(req.file.path);
+
+    const parsed = await pdfParse(fileBuffer);
+    const lines = parsed.text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+
+    // Caută linii cu: nume produs + cantitate + preț
+    // Suportă formate: "Produs 10 buc 45.00" sau "Produs | 10 | 45,00" etc.
+    const priceRegex = /(\d+[.,]\d{1,2})\s*(RON|lei|EUR|€)?/i;
+    const qtyRegex = /(\d+(?:[.,]\d+)?)\s*(buc|sticle?|L|ml|kg|g|bax|pac|por[tț]ie)/i;
+
+    const found = [];
+    const errors = [];
+
+    for (const line of lines) {
+      if (line.length < 3 || line.length > 120) continue;
+      if (/^(total|subtotal|tva|factura|data|nr\.|client|adresa|cod|pagina)/i.test(line)) continue;
+
+      const prices = line.match(/(\d+[.,]\d{2})/g);
+      if (!prices) continue;
+
+      // Preț = ultimul număr cu 2 zecimale din linie
+      const rawPrice = prices[prices.length - 1].replace(',', '.');
+      const price = parseFloat(rawPrice);
+      if (!price || price > 99999 || price < 0.01) continue;
+
+      // Cantitate — caută număr + unitate sau primul număr simplu
+      const qtyMatch = line.match(qtyRegex);
+      let quantity = 1;
+      let unit = 'buc';
+      if (qtyMatch) {
+        quantity = parseFloat(qtyMatch[1].replace(',', '.'));
+        unit = qtyMatch[2];
+      }
+
+      // Numele produsului = tot ce rămâne după ce scoatem cifrele și unitățile
+      let name = line
+        .replace(/(\d+[.,]\d{1,2})\s*(RON|lei|EUR|€)?/gi, '')
+        .replace(/(\d+(?:[.,]\d+)?)\s*(buc|sticle?|L|ml|kg|g|bax|pac|por[tț]ie)/gi, '')
+        .replace(/[|;,\t]+/g, ' ')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+
+      // Elimină rânduri prea scurte sau care arată a cod/număr
+      if (name.length < 2 || /^\d+$/.test(name)) continue;
+
+      found.push({ name, quantity, unit, purchasePrice: price });
+    }
+
+    if (found.length === 0) {
+      return res.status(400).json({ error: 'Nu s-au găsit produse în acest PDF. Verifică că fișierul este o factură sau listă de prețuri cu text selectabil (nu scanat).' });
+    }
+
+    // Upsert products în DB
+    let created = 0, updated = 0;
+    const previewLines = [];
+
+    for (const item of found) {
+      // Caută produs existent după nume (case-insensitive, fuzzy)
+      const existing = await Product.findOne({
+        name: { $regex: new RegExp(item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+        active: true
+      });
+
+      if (existing) {
+        await Product.findByIdAndUpdate(existing._id, {
+          purchasePrice: item.purchasePrice,
+          ...(item.quantity ? { stockQuantity: (existing.stockQuantity || 0) + item.quantity } : {})
+        });
+        updated++;
+        previewLines.push(`↺ ${item.name} — ${item.purchasePrice} RON`);
+      } else {
+        await Product.create({
+          name: item.name,
+          category: 'altele',
+          unit: item.unit,
+          stockQuantity: item.quantity,
+          purchasePrice: item.purchasePrice,
+          active: true
+        });
+        created++;
+        previewLines.push(`+ ${item.name} — ${item.purchasePrice} RON`);
+      }
+    }
+
+    res.json({
+      ok: true,
+      message: `PDF procesat: ${created} produse noi, ${updated} actualizate`,
+      preview: previewLines.slice(0, 15).join('<br>'),
+      errors
+    });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }

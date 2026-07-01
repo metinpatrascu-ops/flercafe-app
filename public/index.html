@@ -247,6 +247,10 @@ body { background: var(--fc-dark); color: var(--fc-text); font-family: 'Segoe UI
             <i class="bi bi-upload"></i> Import Excel
           </button>
           <input type="file" id="import-excel-file" accept=".xlsx,.xls" class="d-none" onchange="importExcel(event)">
+          <button class="btn btn-outline-secondary btn-sm" onclick="document.getElementById('import-pdf-file').click()" title="Importă produse din PDF (factură/listă furnizor)" id="btn-import-pdf">
+            <i class="bi bi-file-earmark-pdf"></i> Import PDF
+          </button>
+          <input type="file" id="import-pdf-file" accept=".pdf" class="d-none" onchange="importPDF(event)">
           <button class="btn btn-primary btn-sm" onclick="openProductModal()"><i class="bi bi-plus"></i> Adaugă produs</button>
         </div>
       </div>
@@ -2181,6 +2185,39 @@ function recalculate() {
 
 function exportExcel() {
   window.location.href = '/api/stock/export-excel?token=' + TOKEN;
+}
+
+async function importPDF(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  event.target.value = '';
+
+  const btn = document.getElementById('btn-import-pdf');
+  const origHtml = btn.innerHTML;
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner-fc"></span> Se procesează...';
+
+  try {
+    const fd = new FormData();
+    fd.append('file', file);
+    const data = await api('POST', '/stock/import-pdf', fd, true);
+
+    const color = data.errors?.length ? '#ffb432' : '#64c864';
+    const icon = data.errors?.length ? '⚠️' : '✅';
+    const toast = document.createElement('div');
+    toast.style.cssText = `position:fixed;bottom:24px;right:24px;background:#242424;border:1px solid ${color};color:#e0e0e0;padding:16px 20px;border-radius:12px;z-index:9999;max-width:400px;box-shadow:0 4px 20px rgba(0,0,0,.4);`;
+    toast.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">${icon} ${data.message}</div>
+      ${data.preview ? `<div style="color:var(--fc-muted);font-size:.78rem;margin-top:6px;max-height:120px;overflow-y:auto;">${data.preview}</div>` : ''}
+      ${data.errors?.length ? `<div style="color:#ffb432;font-size:.78rem;margin-top:6px;">${data.errors.slice(0,3).join('<br>')}</div>` : ''}`;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.remove(), 7000);
+    await loadProducts();
+  } catch (e) {
+    alert('Eroare import PDF: ' + e.message);
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = origHtml;
+  }
 }
 
 async function importExcel(event) {
