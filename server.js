@@ -1186,53 +1186,34 @@ app.post('/api/stock/import-pdf', verifyToken, uploadPDF.single('file'), async (
     fs.unlinkSync(req.file.path);
 
     const parsed = await pdfParse(fileBuffer);
-    const lines = parsed.text.split('\n').map(l => l.trim()).filter(l => l.length > 1);
+    const lines = parsed.text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
 
-    // Caută linii cu: nume produs + cantitate + preț
-    // Suportă formate: "Produs 10 buc 45.00" sau "Produs | 10 | 45,00" etc.
-    const priceRegex = /(\d+[.,]\d{1,2})\s*(RON|lei|EUR|€)?/i;
-    const qtyRegex = /(\d+(?:[.,]\d+)?)\s*(buc|sticle?|L|ml|kg|g|bax|pac|por[tț]ie)/i;
+    // Format inventar flērcafē: linie nume produs, urmat de "<qty> buc<pret><total>"
+    // Ex: "Aqua Carpatica plată 330ml" + "141 buc4,15585,15"
+    const QTY_LINE = /^(\d+) buc(\d+,\d{2})([\d.,]+)$/;
+    const SKIP = /^(ProdusCantitate|Valoare|Subtotal|TOTAL|Inventar|fler|Pret unit|\(lei\)|Pret)/i;
 
     const found = [];
-    const errors = [];
+    let prevName = null;
 
     for (const line of lines) {
-      if (line.length < 3 || line.length > 120) continue;
-      if (/^(total|subtotal|tva|factura|data|nr\.|client|adresa|cod|pagina)/i.test(line)) continue;
-
-      const prices = line.match(/(\d+[.,]\d{2})/g);
-      if (!prices) continue;
-
-      // Preț = ultimul număr cu 2 zecimale din linie
-      const rawPrice = prices[prices.length - 1].replace(',', '.');
-      const price = parseFloat(rawPrice);
-      if (!price || price > 99999 || price < 0.01) continue;
-
-      // Cantitate — caută număr + unitate sau primul număr simplu
-      const qtyMatch = line.match(qtyRegex);
-      let quantity = 1;
-      let unit = 'buc';
-      if (qtyMatch) {
-        quantity = parseFloat(qtyMatch[1].replace(',', '.'));
-        unit = qtyMatch[2];
+      if (SKIP.test(line)) { prevName = null; continue; }
+      if (/^\d[\d.,]+ lei$/.test(line)) { prevName = null; continue; }
+      const qm = line.match(QTY_LINE);
+      if (qm && prevName) {
+        const qty = parseInt(qm[1]);
+        const price = parseFloat(qm[2].replace(',', '.'));
+        if (price > 0) found.push({ name: prevName, quantity: qty, purchasePrice: price });
+        prevName = null;
+      } else if (!qm) {
+        prevName = line;
+      } else {
+        prevName = null;
       }
-
-      // Numele produsului = tot ce rămâne după ce scoatem cifrele și unitățile
-      let name = line
-        .replace(/(\d+[.,]\d{1,2})\s*(RON|lei|EUR|€)?/gi, '')
-        .replace(/(\d+(?:[.,]\d+)?)\s*(buc|sticle?|L|ml|kg|g|bax|pac|por[tț]ie)/gi, '')
-        .replace(/[|;,\t]+/g, ' ')
-        .replace(/\s{2,}/g, ' ')
-        .trim();
-
-      // Elimină rânduri prea scurte sau care arată a cod/număr
-      if (name.length < 2 || /^\d+$/.test(name)) continue;
-
-      found.push({ name, quantity, unit, purchasePrice: price });
     }
 
     if (found.length === 0) {
-      return res.status(400).json({ error: 'Nu s-au găsit produse în acest PDF. Verifică că fișierul este o factură sau listă de prețuri cu text selectabil (nu scanat).' });
+      return res.status(400).json({ error: 'Nu s-au găsit produse în acest PDF. Verifică că fișierul este un inventar exportat din aplicație sau o factură cu text selectabil (nu scanat).' });
     }
 
     // Upsert products în DB
@@ -1240,24 +1221,24 @@ app.post('/api/stock/import-pdf', verifyToken, uploadPDF.single('file'), async (
     const previewLines = [];
 
     for (const item of found) {
-      // Caută produs existent după nume (case-insensitive, fuzzy)
+      const escapedName = item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       const existing = await Product.findOne({
-        name: { $regex: new RegExp(item.name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i') },
+        name: { $regex: new RegExp(escapedName, 'i') },
         active: true
       });
 
       if (existing) {
         await Product.findByIdAndUpdate(existing._id, {
           purchasePrice: item.purchasePrice,
-          ...(item.quantity ? { stockQuantity: (existing.stockQuantity || 0) + item.quantity } : {})
+          stockQuantity: item.quantity
         });
         updated++;
-        previewLines.push(`↺ ${item.name} — ${item.purchasePrice} RON`);
+        previewLines.push(`↺ ${item.name} — stoc: ${item.quantity}, preț: ${item.purchasePrice} RON`);
       } else {
         await Product.create({
           name: item.name,
           category: 'altele',
-          unit: item.unit,
+          unit: 'buc',
           stockQuantity: item.quantity,
           purchasePrice: item.purchasePrice,
           active: true
